@@ -41,6 +41,7 @@ EOS_token_index = 1
 SOS_token = "\x01"
 EOS_token = "\x02"
 
+
 class Lang:
     def __init__(self, name, sentences):
         word_counter = Counter()
@@ -58,18 +59,19 @@ class Lang:
         self.word2index[SOS_token] = SOS_token_index
         self.word2index[EOS_token] = EOS_token_index
 
-        self.index2word = {v:k for k,v in self.word2index.items()}
+        self.index2word = {v: k for k, v in self.word2index.items()}
+
 
 def prepareData(source, target):
     print("Reading lines...")
 
     source_sentences = []
     target_sentences = []
-    with open(source_train_file, "r") as sf,  open(target_train_file, "r") as tf:
+    with open(source_train_file, "r") as sf, open(target_train_file, "r") as tf:
         for x, y in zip(sf, tf):
             x = x.rstrip()
             y = y.rstrip()
-            if (len(x.split()) < MAX_LENGTH and len(y.split()) < MAX_LENGTH):
+            if len(x.split()) < MAX_LENGTH and len(y.split()) < MAX_LENGTH:
                 source_sentences.append(x)
                 target_sentences.append(y)
 
@@ -79,10 +81,12 @@ def prepareData(source, target):
 
     return input_lang, output_lang, pairs
 
-input_lang, output_lang, pairs = prepareData('wiki', 'simple')
+
+input_lang, output_lang, pairs = prepareData("wiki", "simple")
 print(input_lang.name, input_lang.n_words)
 print(output_lang.name, output_lang.n_words)
 print(random.choice(pairs))
+
 
 class EncoderRNN(nn.Module):
     def __init__(self, input_size, hidden_size):
@@ -100,6 +104,7 @@ class EncoderRNN(nn.Module):
 
     def initHidden(self):
         return torch.zeros(1, 1, self.hidden_size, device=device)
+
 
 class DecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size):
@@ -121,6 +126,7 @@ class DecoderRNN(nn.Module):
     def initHidden(self):
         return torch.zeros(1, 1, self.hidden_size, device=device)
 
+
 class AttnDecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size, dropout_p=0.1, max_length=MAX_LENGTH):
         super(AttnDecoderRNN, self).__init__()
@@ -141,9 +147,11 @@ class AttnDecoderRNN(nn.Module):
         embedded = self.dropout(embedded)
 
         attn_weights = F.softmax(
-            self.attn(torch.cat((embedded[0], hidden[0]), 1)), dim=1)
-        attn_applied = torch.bmm(attn_weights.unsqueeze(0),
-                                 encoder_outputs.unsqueeze(0))
+            self.attn(torch.cat((embedded[0], hidden[0]), 1)), dim=1
+        )
+        attn_applied = torch.bmm(
+            attn_weights.unsqueeze(0), encoder_outputs.unsqueeze(0)
+        )
 
         output = torch.cat((embedded[0], attn_applied[0]), 1)
         output = self.attn_combine(output).unsqueeze(0)
@@ -159,7 +167,7 @@ class AttnDecoderRNN(nn.Module):
 
 
 def tensorFromSentence(lang, sentence):
-    indexes = [lang.word2index[word] for word in sentence.split(' ')]
+    indexes = [lang.word2index[word] for word in sentence.split(" ")]
     indexes.append(EOS_token_index)
     return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
 
@@ -170,7 +178,16 @@ def tensorsFromPair(pair):
     return (input_tensor, target_tensor)
 
 
-def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, max_length=MAX_LENGTH):
+def train(
+    input_tensor,
+    target_tensor,
+    encoder,
+    decoder,
+    encoder_optimizer,
+    decoder_optimizer,
+    criterion,
+    max_length=MAX_LENGTH,
+):
     encoder_hidden = encoder.initHidden()
 
     encoder_optimizer.zero_grad()
@@ -197,7 +214,8 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
         # Teacher forcing: Feed the target as the next input
         for di in range(target_length):
             decoder_output, decoder_hidden, decoder_attention = decoder(
-                decoder_input, decoder_hidden, encoder_outputs)
+                decoder_input, decoder_hidden, encoder_outputs
+            )
             loss += criterion(decoder_output, target_tensor[di])
             decoder_input = target_tensor[di]  # Teacher forcing
 
@@ -205,7 +223,8 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
         # Without teacher forcing: use its own predictions as the next input
         for di in range(target_length):
             decoder_output, decoder_hidden, decoder_attention = decoder(
-                decoder_input, decoder_hidden, encoder_outputs)
+                decoder_input, decoder_hidden, encoder_outputs
+            )
             topv, topi = decoder_output.topk(1)
             decoder_input = topi.squeeze().detach()  # detach from history as input
 
@@ -220,6 +239,7 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
 
     return loss.item() / target_length
 
+
 import time
 import math
 
@@ -227,7 +247,7 @@ import math
 def asMinutes(s):
     m = math.floor(s / 60)
     s -= m * 60
-    return '%dm %ds' % (m, s)
+    return "%dm %ds" % (m, s)
 
 
 def timeSince(since, percent):
@@ -235,11 +255,13 @@ def timeSince(since, percent):
     s = now - since
     es = s / (percent)
     rs = es - s
-    return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
+    return "%s (- %s)" % (asMinutes(s), asMinutes(rs))
 
-def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.01):
+
+def trainIters(
+    encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.01
+):
     start = time.time()
-    plot_losses = []
     print_loss_total = 0  # Reset every print_every
 
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
@@ -252,15 +274,30 @@ def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, lear
         input_tensor = training_pair[0]
         target_tensor = training_pair[1]
 
-        loss = train(input_tensor, target_tensor, encoder,
-                     decoder, encoder_optimizer, decoder_optimizer, criterion)
+        loss = train(
+            input_tensor,
+            target_tensor,
+            encoder,
+            decoder,
+            encoder_optimizer,
+            decoder_optimizer,
+            criterion,
+        )
         print_loss_total += loss
 
         if iter % print_every == 0:
             print_loss_avg = print_loss_total / print_every
             print_loss_total = 0
-            print('%s (%d %d%%) %.4f' % (timeSince(start, iter / n_iters),
-                                         iter, iter / n_iters * 100, print_loss_avg))
+            print(
+                "%s (%d %d%%) %.4f"
+                % (
+                    timeSince(start, iter / n_iters),
+                    iter,
+                    iter / n_iters * 100,
+                    print_loss_avg,
+                )
+            )
+
 
 """Evaluation
 ==========
@@ -272,6 +309,7 @@ predicts the EOS token we stop there. We also store the decoder's
 attention outputs for display later.
 """
 
+
 def evaluate(encoder, decoder, sentence, max_length=MAX_LENGTH):
     with torch.no_grad():
         input_tensor = tensorFromSentence(input_lang, sentence)
@@ -281,8 +319,7 @@ def evaluate(encoder, decoder, sentence, max_length=MAX_LENGTH):
         encoder_outputs = torch.zeros(max_length, encoder.hidden_size, device=device)
 
         for ei in range(input_length):
-            encoder_output, encoder_hidden = encoder(input_tensor[ei],
-                                                     encoder_hidden)
+            encoder_output, encoder_hidden = encoder(input_tensor[ei], encoder_hidden)
             encoder_outputs[ei] += encoder_output[0, 0]
 
         decoder_input = torch.tensor([[SOS_token_index]], device=device)  # SOS
@@ -294,7 +331,8 @@ def evaluate(encoder, decoder, sentence, max_length=MAX_LENGTH):
 
         for di in range(max_length):
             decoder_output, decoder_hidden, decoder_attention = decoder(
-                decoder_input, decoder_hidden, encoder_outputs)
+                decoder_input, decoder_hidden, encoder_outputs
+            )
             decoder_attentions[di] = decoder_attention.data
             topv, topi = decoder_output.data.topk(1)
             if topi.item() == EOS_token_index:
@@ -305,11 +343,13 @@ def evaluate(encoder, decoder, sentence, max_length=MAX_LENGTH):
 
             decoder_input = topi.squeeze().detach()
 
-        return decoded_words, decoder_attentions[:di + 1]
+        return decoded_words, decoder_attentions[: di + 1]
+
 
 hidden_size = 256
 encoder1 = EncoderRNN(input_lang.n_words, hidden_size).to(device)
-attn_decoder1 = AttnDecoderRNN(hidden_size, output_lang.n_words, dropout_p=0.1).to(device)
+attn_decoder1 = AttnDecoderRNN(hidden_size, output_lang.n_words, dropout_p=0.1)
+attn_decoder1 = attn_decoder1.to(device)
 
 trainIters(encoder1, attn_decoder1, 75000, print_every=1000)
 
@@ -317,14 +357,17 @@ trainIters(encoder1, attn_decoder1, 75000, print_every=1000)
 """We can evaluate random sentences from the training set and print out the
 input, target, and output to make some subjective quality judgements:
 """
+
+
 def evaluateRandomly(encoder, decoder, n=10):
-    for i in range(n):
+    for _ in range(n):
         pair = random.choice(pairs)
-        print('source:', pair[0])
-        print('target:', pair[1])
+        print("source:", pair[0])
+        print("target:", pair[1])
         output_words, attentions = evaluate(encoder, decoder, pair[0])
-        output_sentence = ' '.join(output_words)
-        print('output:', output_sentence)
-        print('')
+        output_sentence = " ".join(output_words)
+        print("output:", output_sentence)
+        print("")
+
 
 evaluateRandomly(encoder1, attn_decoder1)
