@@ -7,24 +7,12 @@ Original file is located at
     https://colab.research.google.com/drive/17NOLsbIrVMWrKjiZyZP-ac3qsAdtDkP2
 """
 
-# http://pytorch.org/
-from os.path import exists
-from wheel.pep425tags import get_abbr_impl, get_impl_ver, get_abi_tag
-platform = '{}{}-{}'.format(get_abbr_impl(), get_impl_ver(), get_abi_tag())
-cuda_output = !ldconfig -p|grep cudart.so|sed -e 's/.*\.\([0-9]*\)\.\([0-9]*\)$/cu\1\2/'
-accelerator = cuda_output[0] if exists('/dev/nvidia0') else 'cpu'
-
-!pip install -q http://download.pytorch.org/whl/{accelerator}/torch-0.4.1-{platform}-linux_x86_64.whl torchvision
-import torch
-
-from google.colab import drive
-drive.mount('/gdrive')
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from collections import Counter
 import os
 import re
 import math
@@ -34,81 +22,66 @@ import numpy as np
 import time
 import random
 
-# %matplotlib inline
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = torch.device("cpu")
 print(device)
 
-source_train_file = "/gdrive/My Drive/Colab Notebooks/source_train.txt"
-target_train_file = "/gdrive/My Drive/Colab Notebooks/target_train.txt"
-source_test_file = "/gdrive/My Drive/Colab Notebooks/source_test.txt"
-target_test_file = "/gdrive/My Drive/Colab Notebooks/target_test.txt"
-output_file = "/gdrive/My Drive/Colab Notebooks/output.txt"
-model_file = "/gdrive/My Drive/Colab Notebooks/model.pkl"
+source_train_file = "./data/source_train.txt"
+target_train_file = "./data/target_train.txt"
+source_test_file = "./data/source_test.txt"
+target_test_file = "./data/target_test.txt"
+output_file = "./data/output.txt"
+model_file = "./data/model.pkl"
 
-MAX_LENGTH = 10
+MAX_LENGTH = 30
+TEACHER_FORCING_RATIO = 0.5
 
-SOS_token = 0
-EOS_token = 1
-
+SOS_token_index = 0
+EOS_token_index = 1
+SOS_token = "\x01"
+EOS_token = "\x02"
 
 class Lang:
-    def __init__(self, name):
+    def __init__(self, name, sentences):
+        word_counter = Counter()
+        for sentence in sentences:
+            word_counter.update(sentence.split())
+
         self.name = name
-        self.word2index = {}
-        self.word2count = {}
-        self.index2word = {0: "\x01", 1: "\x02"}
-        self.n_words = 2  # Count SOS and EOS
+        self.word2count = dict(word_counter)
+        self.n_words = len(word_counter) + 2
 
-    def addSentence(self, sentence):
-        for word in sentence.split():
-            self.addWord(word)
+        self.word2count[SOS_token] = len(sentences)
+        self.word2count[EOS_token] = len(sentences)
 
-    def addWord(self, word):
-        if word not in self.word2index:
-            self.word2index[word] = self.n_words
-            self.word2count[word] = 1
-            self.index2word[self.n_words] = word
-            self.n_words += 1
-        else:
-            self.word2count[word] += 1
+        self.word2index = {word: idx + 2 for idx, word in enumerate(word_counter)}
+        self.word2index[SOS_token] = SOS_token_index
+        self.word2index[EOS_token] = EOS_token_index
 
-def readLangs(lang1, lang2, reverse=False):
+        self.index2word = {v:k for k,v in self.word2index.items()}
+
+def prepareData(source, target):
     print("Reading lines...")
-  
-    pairs = []
+
+    source_sentences = []
+    target_sentences = []
     with open(source_train_file, "r") as sf,  open(target_train_file, "r") as tf:
         for x, y in zip(sf, tf):
             x = x.rstrip()
             y = y.rstrip()
             if (len(x.split()) < MAX_LENGTH and len(y.split()) < MAX_LENGTH):
-                pairs.append((x, y))
+                source_sentences.append(x)
+                target_sentences.append(y)
 
-    # Reverse pairs, make Lang instances
-    if reverse:
-        pairs = [list(reversed(p)) for p in pairs]
-        input_lang = Lang(lang2)
-        output_lang = Lang(lang1)
-    else:
-        input_lang = Lang(lang1)
-        output_lang = Lang(lang2)
+    pairs = list(zip(source_sentences, target_sentences))
+    input_lang = Lang(source, source_sentences)
+    output_lang = Lang(target, target_sentences)
 
     return input_lang, output_lang, pairs
 
-def prepareData(lang1, lang2, reverse=False):
-    input_lang, output_lang, pairs = readLangs(lang1, lang2, reverse)
-    print("Read %s sentence pairs" % len(pairs))
-    print("Counting words...")
-    for pair in pairs:
-        input_lang.addSentence(pair[0])
-        output_lang.addSentence(pair[1])
-    print("Counted words:")
-    print(input_lang.name, input_lang.n_words)
-    print(output_lang.name, output_lang.n_words)
-    return input_lang, output_lang, pairs
-
-
-input_lang, output_lang, pairs = prepareData('wiki', 'simple', True)
+input_lang, output_lang, pairs = prepareData('wiki', 'simple')
+print(input_lang.name, input_lang.n_words)
+print(output_lang.name, output_lang.n_words)
 print(random.choice(pairs))
 
 class EncoderRNN(nn.Module):
@@ -184,13 +157,10 @@ class AttnDecoderRNN(nn.Module):
     def initHidden(self):
         return torch.zeros(1, 1, self.hidden_size, device=device)
 
-def indexesFromSentence(lang, sentence):
-    return [lang.word2index[word] for word in sentence.split(' ')]
-
 
 def tensorFromSentence(lang, sentence):
-    indexes = indexesFromSentence(lang, sentence)
-    indexes.append(EOS_token)
+    indexes = [lang.word2index[word] for word in sentence.split(' ')]
+    indexes.append(EOS_token_index)
     return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
 
 
@@ -198,8 +168,6 @@ def tensorsFromPair(pair):
     input_tensor = tensorFromSentence(input_lang, pair[0])
     target_tensor = tensorFromSentence(output_lang, pair[1])
     return (input_tensor, target_tensor)
-
-teacher_forcing_ratio = 0.5
 
 
 def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, max_length=MAX_LENGTH):
@@ -219,11 +187,11 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
         encoder_output, encoder_hidden = encoder(input_tensor[ei], encoder_hidden)
         encoder_outputs[ei] = encoder_output[0, 0]
 
-    decoder_input = torch.tensor([[SOS_token]], device=device)
+    decoder_input = torch.tensor([[SOS_token_index]], device=device)
 
     decoder_hidden = encoder_hidden
 
-    use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
+    use_teacher_forcing = True if random.random() < TEACHER_FORCING_RATIO else False
 
     if use_teacher_forcing:
         # Teacher forcing: Feed the target as the next input
@@ -242,7 +210,7 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
             decoder_input = topi.squeeze().detach()  # detach from history as input
 
             loss += criterion(decoder_output, target_tensor[di])
-            if decoder_input.item() == EOS_token:
+            if decoder_input.item() == EOS_token_index:
                 break
 
     loss.backward()
@@ -273,12 +241,10 @@ def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, lear
     start = time.time()
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
-    plot_loss_total = 0  # Reset every plot_every
 
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
-    training_pairs = [tensorsFromPair(random.choice(pairs))
-                      for i in range(n_iters)]
+    training_pairs = [tensorsFromPair(random.choice(pairs)) for i in range(n_iters)]
     criterion = nn.NLLLoss()
 
     for iter in range(1, n_iters + 1):
@@ -289,41 +255,12 @@ def trainIters(encoder, decoder, n_iters, print_every=1000, plot_every=100, lear
         loss = train(input_tensor, target_tensor, encoder,
                      decoder, encoder_optimizer, decoder_optimizer, criterion)
         print_loss_total += loss
-        plot_loss_total += loss
 
         if iter % print_every == 0:
             print_loss_avg = print_loss_total / print_every
             print_loss_total = 0
             print('%s (%d %d%%) %.4f' % (timeSince(start, iter / n_iters),
                                          iter, iter / n_iters * 100, print_loss_avg))
-
-        if iter % plot_every == 0:
-            plot_loss_avg = plot_loss_total / plot_every
-            plot_losses.append(plot_loss_avg)
-            plot_loss_total = 0
-
-    showPlot(plot_losses)
-
-"""Plotting results
-----------------
-
-Plotting is done with matplotlib, using the array of loss values
-``plot_losses`` saved while training.
-"""
-
-import matplotlib.pyplot as plt
-plt.switch_backend('agg')
-import matplotlib.ticker as ticker
-import numpy as np
-
-
-def showPlot(points):
-    plt.figure()
-    fig, ax = plt.subplots()
-    # this locator puts ticks at regular intervals
-    loc = ticker.MultipleLocator(base=0.2)
-    ax.yaxis.set_major_locator(loc)
-    plt.plot(points)
 
 """Evaluation
 ==========
@@ -348,7 +285,7 @@ def evaluate(encoder, decoder, sentence, max_length=MAX_LENGTH):
                                                      encoder_hidden)
             encoder_outputs[ei] += encoder_output[0, 0]
 
-        decoder_input = torch.tensor([[SOS_token]], device=device)  # SOS
+        decoder_input = torch.tensor([[SOS_token_index]], device=device)  # SOS
 
         decoder_hidden = encoder_hidden
 
@@ -360,8 +297,8 @@ def evaluate(encoder, decoder, sentence, max_length=MAX_LENGTH):
                 decoder_input, decoder_hidden, encoder_outputs)
             decoder_attentions[di] = decoder_attention.data
             topv, topi = decoder_output.data.topk(1)
-            if topi.item() == EOS_token:
-                decoded_words.append('<EOS>')
+            if topi.item() == EOS_token_index:
+                decoded_words.append(EOS_token)
                 break
             else:
                 decoded_words.append(output_lang.index2word[topi.item()])
@@ -370,98 +307,24 @@ def evaluate(encoder, decoder, sentence, max_length=MAX_LENGTH):
 
         return decoded_words, decoder_attentions[:di + 1]
 
-"""We can evaluate random sentences from the training set and print out the
-input, target, and output to make some subjective quality judgements:
-"""
-
-def evaluateRandomly(encoder, decoder, n=10):
-    for i in range(n):
-        pair = random.choice(pairs)
-        print('>', pair[0])
-        print('=', pair[1])
-        output_words, attentions = evaluate(encoder, decoder, pair[0])
-        output_sentence = ' '.join(output_words)
-        print('<', output_sentence)
-        print('')
-
-"""Training and Evaluating
-=======================
-
-With all these helper functions in place (it looks like extra work, but
-it makes it easier to run multiple experiments) we can actually
-initialize a network and start training.
-
-Remember that the input sentences were heavily filtered. For this small
-dataset we can use relatively small networks of 256 hidden nodes and a
-single GRU layer. After about 40 minutes on a MacBook CPU we'll get some
-reasonable results.
-
-.. Note::
-   If you run this notebook you can train, interrupt the kernel,
-   evaluate, and continue training later. Comment out the lines where the
-   encoder and decoder are initialized and run ``trainIters`` again.
-"""
-
-hidden_size = 64 # 256
+hidden_size = 256
 encoder1 = EncoderRNN(input_lang.n_words, hidden_size).to(device)
 attn_decoder1 = AttnDecoderRNN(hidden_size, output_lang.n_words, dropout_p=0.1).to(device)
 
-trainIters(encoder1, attn_decoder1, 75000, print_every=5000)
+trainIters(encoder1, attn_decoder1, 75000, print_every=1000)
+
+
+"""We can evaluate random sentences from the training set and print out the
+input, target, and output to make some subjective quality judgements:
+"""
+def evaluateRandomly(encoder, decoder, n=10):
+    for i in range(n):
+        pair = random.choice(pairs)
+        print('source:', pair[0])
+        print('target:', pair[1])
+        output_words, attentions = evaluate(encoder, decoder, pair[0])
+        output_sentence = ' '.join(output_words)
+        print('output:', output_sentence)
+        print('')
 
 evaluateRandomly(encoder1, attn_decoder1)
-
-"""Visualizing Attention
----------------------
-
-A useful property of the attention mechanism is its highly interpretable
-outputs. Because it is used to weight specific encoder outputs of the
-input sequence, we can imagine looking where the network is focused most
-at each time step.
-
-You could simply run ``plt.matshow(attentions)`` to see attention output
-displayed as a matrix, with the columns being input steps and rows being
-output steps:
-"""
-
-output_words, attentions = evaluate(
-    encoder1, attn_decoder1, "The median age is 30 years .")
-plt.matshow(attentions.numpy())
-
-"""For a better viewing experience we will do the extra work of adding axes
-and labels:
-"""
-
-def showAttention(input_sentence, output_words, attentions):
-    # Set up figure with colorbar
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    cax = ax.matshow(attentions.numpy(), cmap='bone')
-    fig.colorbar(cax)
-
-    # Set up axes
-    ax.set_xticklabels([''] + input_sentence.split(' ') +
-                       ['<EOS>'], rotation=90)
-    ax.set_yticklabels([''] + output_words)
-
-    # Show label at every tick
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
-    ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
-
-    plt.show()
-
-
-def evaluateAndShowAttention(input_sentence):
-    output_words, attentions = evaluate(
-        encoder1, attn_decoder1, input_sentence)
-    print('input =', input_sentence)
-    print('output =', ' '.join(output_words))
-    showAttention(input_sentence, output_words, attentions)
-
-
-evaluateAndShowAttention("The median age is 30 year .")
-
-evaluateAndShowAttention("The awards are given out by the China Film Association .")
-
-evaluateAndShowAttention("At the 2000 census the population was 270 .")
-
-evaluateAndShowAttention("The station is between Sudbury Town and Park Royal .")
