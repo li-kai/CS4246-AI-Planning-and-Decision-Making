@@ -16,7 +16,7 @@ from seq2seq.evaluator import Predictor
 from seq2seq.util.checkpoint import Checkpoint
 
 # Path to experiment directory for storing checkpoints
-EXPERIMENT_PATH = './experiment'
+EXPERIMENT_PATH = "./experiment"
 
 # Sample usage:
 #     # training
@@ -30,10 +30,11 @@ EXPERIMENT_PATH = './experiment'
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--train_path", action="store", dest="train_path", help="Path to train data"
-)
-parser.add_argument(
-    "--dev_path", action="store", dest="dev_path", help="Path to dev data"
+    "--train_path",
+    action="store",
+    dest="train_path",
+    help="Path to train data",
+    default="data/simple_wiki/train/data.txt",
 )
 parser.add_argument(
     "--load_checkpoint",
@@ -69,29 +70,18 @@ if opt.load_checkpoint is not None:
     output_vocab = checkpoint.output_vocab
 else:
     # Prepare dataset
-    src = SourceField()
-    tgt = TargetField()
-    max_len = 50
-
-    def len_filter(example):
-        return len(example.src) <= max_len and len(example.tgt) <= max_len
+    src = SourceField(sequential=True, use_vocab=True)
+    tgt = TargetField(sequential=True, use_vocab=True)
+    max_len = 30
 
     train = torchtext.data.TabularDataset(
-        path=opt.train_path,
-        format="tsv",
-        fields=[("src", src), ("tgt", tgt)],
-        filter_pred=len_filter,
+        path=opt.train_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
     )
-    dev = torchtext.data.TabularDataset(
-        path=opt.dev_path,
-        format="tsv",
-        fields=[("src", src), ("tgt", tgt)],
-        filter_pred=len_filter,
-    )
-    src.build_vocab(train, max_size=50000)
-    tgt.build_vocab(train, max_size=50000)
+    src.build_vocab(train, vectors="glove.6B.100d", max_size=50000)
+    tgt.build_vocab(train, vectors="glove.6B.100d", max_size=50000)
     input_vocab = src.vocab
     output_vocab = tgt.vocab
+    print(train[0].src)
 
     # NOTE: If the source field name and the target field name
     # are different from 'src' and 'tgt' respectively, they have
@@ -110,12 +100,14 @@ else:
     optimizer = None
     if not opt.resume:
         # Initialize model
-        hidden_size = 128
+        hidden_size = 100
         bidirectional = True
+
         encoder = EncoderRNN(
             len(src.vocab),
             max_len,
             hidden_size,
+            embedding=src.vocab.vectors,
             bidirectional=bidirectional,
             variable_lengths=True,
         )
@@ -123,7 +115,7 @@ else:
             len(tgt.vocab),
             max_len,
             hidden_size * 2 if bidirectional else hidden_size,
-            dropout_p=0.2,
+            # dropout_p=0.2,
             use_attention=True,
             bidirectional=bidirectional,
             eos_id=tgt.eos_id,
@@ -156,7 +148,6 @@ else:
         seq2seq,
         train,
         num_epochs=6,
-        dev_data=dev,
         optimizer=optimizer,
         teacher_forcing_ratio=0.5,
         resume=opt.resume,
