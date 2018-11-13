@@ -7,6 +7,10 @@ name = "pypi"
 nltk = "*"
 torch = "*"
 torchvision = "*"
+torchtext = "*"
+numpy = "*"
+dill = "*"
+tqdm = "*"
 
 [dev-packages]
 pylint = "*"
