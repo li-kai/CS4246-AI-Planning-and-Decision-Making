@@ -11,6 +11,7 @@ torchtext = "*"
 numpy = "*"
 dill = "*"
 tqdm = "*"
+spacy = "*"
 
 [dev-packages]
 pylint = "*"

@@ -146,3 +146,4 @@ pip-selfcheck.json
 checkpoints
 checkpoints/*
 data/toy_reverse/
+.vector_cache/
