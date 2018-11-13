@@ -35,6 +35,9 @@ model_file = "./data/model.pkl"
 
 MAX_LENGTH = 30
 TEACHER_FORCING_RATIO = 0.5
+HIDDEN_SIZE = 256
+DROPOUT = 0.1
+LEARNING_RATE = 0.01
 
 SOS_token_index = 0
 EOS_token_index = 1
@@ -97,30 +100,12 @@ class EncoderRNN(nn.Module):
         self.gru = nn.GRU(hidden_size, hidden_size)
 
     def forward(self, input, hidden):
-        embedded = self.embedding(input).view(1, 1, -1)
+        embedded = self.embedding(input)
+        print("embedded", embedded.size())
+        embedded = embedded.view(1, 1, -1)
         output = embedded
         output, hidden = self.gru(output, hidden)
-        return output, hidden
-
-    def initHidden(self):
-        return torch.zeros(1, 1, self.hidden_size, device=device)
-
-
-class DecoderRNN(nn.Module):
-    def __init__(self, hidden_size, output_size):
-        super(DecoderRNN, self).__init__()
-        self.hidden_size = hidden_size
-
-        self.embedding = nn.Embedding(output_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size)
-        self.out = nn.Linear(hidden_size, output_size)
-        self.softmax = nn.LogSoftmax(dim=1)
-
-    def forward(self, input, hidden):
-        output = self.embedding(input).view(1, 1, -1)
-        output = F.relu(output)
-        output, hidden = self.gru(output, hidden)
-        output = self.softmax(self.out(output[0]))
+        print("output", output.size())
         return output, hidden
 
     def initHidden(self):
@@ -128,7 +113,7 @@ class DecoderRNN(nn.Module):
 
 
 class AttnDecoderRNN(nn.Module):
-    def __init__(self, hidden_size, output_size, dropout_p=0.1, max_length=MAX_LENGTH):
+    def __init__(self, hidden_size, output_size, dropout_p=DROPOUT, max_length=MAX_LENGTH):
         super(AttnDecoderRNN, self).__init__()
         self.hidden_size = hidden_size
         self.output_size = output_size
@@ -259,20 +244,18 @@ def timeSince(since, percent):
 
 
 def trainIters(
-    encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.01
+    encoder, decoder, n_iters, print_every=1000, learning_rate=LEARNING_RATE
 ):
     start = time.time()
-    print_loss_total = 0  # Reset every print_every
+    print_loss_total = 0
 
-    encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
-    decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
-    training_pairs = [tensorsFromPair(random.choice(pairs)) for i in range(n_iters)]
-    criterion = nn.NLLLoss()
+    encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
+    decoder_optimizer = optim.Adam(decoder.parameters(), lr=learning_rate)
+    training_pairs = [tensorsFromPair(pair) for pair in random.sample(pairs, n_iters)]
+    criterion = nn.NLLLoss().to(device=device)
 
     for iter in range(1, n_iters + 1):
-        training_pair = training_pairs[iter - 1]
-        input_tensor = training_pair[0]
-        target_tensor = training_pair[1]
+        input_tensor, target_tensor = training_pairs[iter - 1]
 
         loss = train(
             input_tensor,
@@ -297,6 +280,13 @@ def trainIters(
                     print_loss_avg,
                 )
             )
+
+
+encoder1 = EncoderRNN(input_lang.n_words, HIDDEN_SIZE).to(device)
+attn_decoder1 = AttnDecoderRNN(HIDDEN_SIZE, output_lang.n_words, dropout_p=DROPOUT)
+attn_decoder1 = attn_decoder1.to(device)
+
+trainIters(encoder1, attn_decoder1, 1, print_every=1000)
 
 
 """Evaluation
@@ -344,14 +334,6 @@ def evaluate(encoder, decoder, sentence, max_length=MAX_LENGTH):
             decoder_input = topi.squeeze().detach()
 
         return decoded_words, decoder_attentions[: di + 1]
-
-
-hidden_size = 256
-encoder1 = EncoderRNN(input_lang.n_words, hidden_size).to(device)
-attn_decoder1 = AttnDecoderRNN(hidden_size, output_lang.n_words, dropout_p=0.1)
-attn_decoder1 = attn_decoder1.to(device)
-
-trainIters(encoder1, attn_decoder1, 75000, print_every=1000)
 
 
 """We can evaluate random sentences from the training set and print out the
