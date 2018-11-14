@@ -7,8 +7,8 @@ from torch.optim.lr_scheduler import StepLR
 import torchtext
 
 import seq2seq
-from seq2seq.trainer import SupervisedTrainer
-from seq2seq.models import EncoderRNN, DecoderRNN, Seq2seq
+from seq2seq.trainer import ReinforcementTrainer
+from seq2seq.models import EncoderRNN, RDecoderRNN, Seq2seq
 from seq2seq.loss import NLLLoss
 from seq2seq.optim import Optimizer
 from seq2seq.dataset import SourceField, TargetField
@@ -125,7 +125,7 @@ else:
             variable_lengths=True,
             rnn_cell="lstm",
         )
-        decoder = DecoderRNN(
+        decoder = RDecoderRNN(
             len(tgt.vocab),
             max_len,
             hidden_size * 2 if bidirectional else hidden_size,
@@ -151,7 +151,7 @@ else:
         # optimizer.set_scheduler(scheduler)
 
     # train
-    t = SupervisedTrainer(
+    t = ReinforcementTrainer(
         loss=loss,
         batch_size=64,
         checkpoint_every=50,

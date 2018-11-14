@@ -15,9 +15,9 @@ from seq2seq.optim import Optimizer
 from seq2seq.util.checkpoint import Checkpoint
 
 
-class SupervisedTrainer(object):
-    """ The SupervisedTrainer class helps in setting up a training framework in a
-    supervised setting.
+class ReinforcementTrainer(object):
+    """ The ReinforcementTrainer class helps in setting up a training framework in a
+    reinforcement learning setting.
 
     Args:
         expt_dir (optional, str): experiment Directory to store details of the experiment,
@@ -66,7 +66,7 @@ class SupervisedTrainer(object):
     ):
         loss = self.loss
         # Forward propagation
-        decoder_outputs, decoder_hidden, other = model(
+        decoder_outputs, sampled_outputs, decoder_hidden, other = model(
             input_variable,
             input_lengths,
             target_variable,
@@ -75,9 +75,11 @@ class SupervisedTrainer(object):
         # Get loss
         loss.reset()
         batch_size = target_variable.size(0)
-        for step, step_output in enumerate(decoder_outputs):
+        for step, output in enumerate(zip(decoder_outputs, sampled_outputs)):
+            step_output, sampled_output = output
             loss.eval_batch(
                 step_output.contiguous().view(batch_size, -1),
+                sampled_output.contiguous().view(batch_size, -1),
                 target_variable[:, step + 1],
             )
         # Backward propagation

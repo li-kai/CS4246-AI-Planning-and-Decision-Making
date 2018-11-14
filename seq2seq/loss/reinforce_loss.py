@@ -15,8 +15,9 @@ class BLEUoss(NLLLoss):
 
     def __init__(self, weight=None, mask=None):
         super(BLEUoss, self).__init__(weight=weight, mask=mask)
+        self.softmax = 
 
-    def eval_batch(self, outputs, target):
+    def eval_batch(self, outputs, sampled_outputs, target):
         # TODO: pass in sampled output
         # TODO: turn weight into words
         sampled_bleu = corpus_bleu(outputs, target)
