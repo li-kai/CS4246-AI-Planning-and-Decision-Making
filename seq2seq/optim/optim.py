@@ -2,6 +2,7 @@ import itertools
 
 import torch
 
+
 class Optimizer(object):
     """ The Optimizer class encapsulates torch.optim package and provides functionalities
     for learning rate scheduling and gradient norm clipping.
@@ -13,7 +14,7 @@ class Optimizer(object):
             set 0 to disable (default 0)
     """
 
-    _ARG_MAX_GRAD_NORM = 'max_grad_norm'
+    _ARG_MAX_GRAD_NORM = "max_grad_norm"
 
     def __init__(self, optim, max_grad_norm=0):
         self.optimizer = optim
@@ -32,7 +33,9 @@ class Optimizer(object):
     def step(self):
         """ Performs a single optimization step, including gradient norm clipping if necessary. """
         if self.max_grad_norm > 0:
-            params = itertools.chain.from_iterable([group['params'] for group in self.optimizer.param_groups])
+            params = itertools.chain.from_iterable(
+                [group["params"] for group in self.optimizer.param_groups]
+            )
             torch.nn.utils.clip_grad_norm_(params, self.max_grad_norm)
         self.optimizer.step()
 
