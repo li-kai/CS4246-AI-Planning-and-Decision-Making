@@ -9,7 +9,7 @@ import torchtext
 import seq2seq
 from seq2seq.trainer import SupervisedTrainer
 from seq2seq.models import EncoderRNN, DecoderRNN, Seq2seq
-from seq2seq.loss import Perplexity
+from seq2seq.loss import NLLLoss
 from seq2seq.optim import Optimizer
 from seq2seq.dataset import SourceField, TargetField
 from seq2seq.evaluator import Predictor, Evaluator
@@ -77,9 +77,13 @@ if opt.load_checkpoint is not None:
     output_vocab = checkpoint.output_vocab
 
     src = SourceField(sequential=True, use_vocab=True)
-    src.vocab = input_vocab
     tgt = TargetField(sequential=True, use_vocab=True)
+    src.vocab = input_vocab
     tgt.vocab = output_vocab
+
+    weight = torch.ones(len(tgt.vocab))
+    pad = tgt.vocab.stoi[tgt.pad_token]
+    loss = NLLLoss(weight, pad)
 else:
     # Prepare dataset
     src = SourceField(sequential=True, use_vocab=True)
@@ -103,9 +107,7 @@ else:
     # Prepare loss
     weight = torch.ones(len(tgt.vocab))
     pad = tgt.vocab.stoi[tgt.pad_token]
-    loss = Perplexity(weight, pad)
-    if torch.cuda.is_available():
-        loss.cuda()
+    loss = NLLLoss(weight, pad)
 
     seq2seq = None
     optimizer = None
@@ -137,7 +139,7 @@ else:
             seq2seq.cuda()
 
         for param in seq2seq.parameters():
-            param.data.uniform_(-0.08, 0.08)
+            param.data.xavier_uniform_()
 
         # Optimizer and learning rate scheduler can be customized by
         # explicitly constructing the objects and pass to the trainer.
@@ -149,7 +151,7 @@ else:
     # train
     t = SupervisedTrainer(
         loss=loss,
-        batch_size=32,
+        batch_size=64,
         checkpoint_every=50,
         print_every=10,
         expt_dir=EXPERIMENT_PATH,
@@ -165,7 +167,7 @@ else:
     )
 
 predictor = Predictor(seq2seq, input_vocab, output_vocab)
-loss, acc = Evaluator().evaluate(seq2seq, torchtext.data.TabularDataset(
+loss, acc = Evaluator(loss=loss).evaluate(seq2seq, torchtext.data.TabularDataset(
     path=opt.test_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
 ))
 logging.info('Loss: {}, Acc: {}'.format(loss, acc))

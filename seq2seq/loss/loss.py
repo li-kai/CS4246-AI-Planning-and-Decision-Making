@@ -1,7 +1,9 @@
 from __future__ import print_function
 import math
+import torch
 import torch.nn as nn
 import numpy as np
+
 
 class Loss(object):
     """ Base class for encapsulation of the loss functions.
@@ -32,10 +34,12 @@ class Loss(object):
     """
 
     def __init__(self, name, criterion):
-        self.name = name
-        self.criterion = criterion
-        if not issubclass(type(self.criterion), nn.modules.loss._Loss):
+        if not issubclass(type(criterion), nn.modules.loss._Loss):
             raise ValueError("Criterion has to be a subclass of torch.nn._Loss")
+        if torch.cuda.is_available():
+            criterion.cuda()
+        self.criterion = criterion
+        self.name = name
         # accumulated loss
         self.acc_loss = 0
         # normalization term
@@ -72,13 +76,11 @@ class Loss(object):
         """
         raise NotImplementedError
 
-    def cuda(self):
-        self.criterion.cuda()
-
     def backward(self):
         if type(self.acc_loss) is int:
             raise ValueError("No loss to back propagate.")
         self.acc_loss.backward()
+
 
 class NLLLoss(Loss):
     """ Batch averaged negative log-likelihood loss.
@@ -91,7 +93,7 @@ class NLLLoss(Loss):
 
     _NAME = "Avg NLLLoss"
 
-    def __init__(self, weight=None, mask=None, reduction='elementwise_mean'):
+    def __init__(self, weight=None, mask=None, reduction="elementwise_mean"):
         self.mask = mask
         self.reduction = reduction
         if mask is not None:
@@ -100,15 +102,15 @@ class NLLLoss(Loss):
             weight[mask] = 0
 
         super(NLLLoss, self).__init__(
-            self._NAME,
-            nn.NLLLoss(weight=weight, reduction=reduction))
+            self._NAME, nn.NLLLoss(weight=weight, reduction=reduction)
+        )
 
     def get_loss(self):
         if isinstance(self.acc_loss, int):
             return 0
         # total loss for all batches
         loss = self.acc_loss.data.item()
-        if self.reduction == 'elementwise_mean':
+        if self.reduction == "elementwise_mean":
             # average loss per batch
             loss /= self.norm_term
         return loss
@@ -116,6 +118,7 @@ class NLLLoss(Loss):
     def eval_batch(self, outputs, target):
         self.acc_loss += self.criterion(outputs, target)
         self.norm_term += 1
+
 
 class Perplexity(NLLLoss):
     """ Language model perplexity loss.
@@ -132,7 +135,9 @@ class Perplexity(NLLLoss):
     _MAX_EXP = 100
 
     def __init__(self, weight=None, mask=None):
-        super(Perplexity, self).__init__(weight=weight, mask=mask, reduction='elementwise_mean')
+        super(Perplexity, self).__init__(
+            weight=weight, mask=mask, reduction="elementwise_mean"
+        )
 
     def eval_batch(self, outputs, target):
         self.acc_loss += self.criterion(outputs, target)
