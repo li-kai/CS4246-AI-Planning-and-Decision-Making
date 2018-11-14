@@ -12,7 +12,7 @@ from seq2seq.models import EncoderRNN, DecoderRNN, Seq2seq
 from seq2seq.loss import Perplexity
 from seq2seq.optim import Optimizer
 from seq2seq.dataset import SourceField, TargetField
-from seq2seq.evaluator import Predictor
+from seq2seq.evaluator import Predictor, Evaluator
 from seq2seq.util.checkpoint import Checkpoint
 
 # Path to experiment directory for storing checkpoints
@@ -20,13 +20,13 @@ EXPERIMENT_PATH = "./experiment"
 
 # Sample usage:
 #     # training
-#      TRAIN_PATH=data/toy_reverse/train/data.txt
-#      DEV_PATH=data/toy_reverse/dev/data.txt
-#      python examples/sample.py --train_path $TRAIN_PATH --dev_path $DEV_PATH
+#      TRAIN_PATH=data/simple_wiki/train/data.txt
+#      TEST_PATH=data/simple_wiki/test/data.txt
+#      python seq2seq.py --train_path $TRAIN_PATH --test_path $TEST_PATH
 #     # resuming from the latest checkpoint of the experiment
-#      python examples/sample.py --train_path $TRAIN_PATH --dev_path $DEV_PATH --resume
+#      python seq2seq.py --train_path $TRAIN_PATH --test_path $TEST_PATH --resume
 #     # resuming from a specific checkpoint
-#      python examples/sample.py --train_path $TRAIN_PATH --dev_path $DEV_PATH --load_checkpoint $CHECKPOINT_DIR
+#      python seq2seq.py --train_path $TRAIN_PATH --test_path $TEST_PATH --load_checkpoint $CHECKPOINT_DIR
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -35,6 +35,13 @@ parser.add_argument(
     dest="train_path",
     help="Path to train data",
     default="data/simple_wiki/train/data.txt",
+)
+parser.add_argument(
+    "--test_path",
+    action="store",
+    dest="test_path",
+    help="Path to test data",
+    default="data/simple_wiki/test/data.txt",
 )
 parser.add_argument(
     "--load_checkpoint",
@@ -61,13 +68,18 @@ logging.info(opt)
 
 if opt.load_checkpoint is not None:
     checkpoint_path = os.path.join(
-        opt.EXPERIMENT_PATH, Checkpoint.CHECKPOINT_DIR_NAME, opt.load_checkpoint
+        EXPERIMENT_PATH, Checkpoint.CHECKPOINT_DIR_NAME, opt.load_checkpoint
     )
     logging.info("loading checkpoint from {}".format(checkpoint_path))
     checkpoint = Checkpoint.load(checkpoint_path)
     seq2seq = checkpoint.model
     input_vocab = checkpoint.input_vocab
     output_vocab = checkpoint.output_vocab
+
+    src = SourceField(sequential=True, use_vocab=True)
+    src.vocab = input_vocab
+    tgt = TargetField(sequential=True, use_vocab=True)
+    tgt.vocab = output_vocab
 else:
     # Prepare dataset
     src = SourceField(sequential=True, use_vocab=True)
@@ -81,7 +93,6 @@ else:
     tgt.build_vocab(train, vectors="glove.6B.100d", max_size=50000)
     input_vocab = src.vocab
     output_vocab = tgt.vocab
-    print(train[0].src)
 
     # NOTE: If the source field name and the target field name
     # are different from 'src' and 'tgt' respectively, they have
@@ -154,6 +165,10 @@ else:
     )
 
 predictor = Predictor(seq2seq, input_vocab, output_vocab)
+loss, acc = Evaluator().evaluate(seq2seq, torchtext.data.TabularDataset(
+    path=opt.test_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
+))
+logging.info('Loss: {}, Acc: {}'.format(loss, acc))
 
 while True:
     seq_str = input("Type in a source sequence:")
