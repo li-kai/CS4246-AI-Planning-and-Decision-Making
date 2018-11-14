@@ -114,7 +114,7 @@ else:
     if not opt.resume:
         # Initialize model
         hidden_size = 100
-        bidirectional = True
+        bidirectional = False
 
         encoder = EncoderRNN(
             len(src.vocab),
@@ -123,6 +123,7 @@ else:
             embedding=src.vocab.vectors,
             bidirectional=bidirectional,
             variable_lengths=True,
+            rnn_cell="lstm",
         )
         decoder = DecoderRNN(
             len(tgt.vocab),
@@ -133,13 +134,14 @@ else:
             bidirectional=bidirectional,
             eos_id=tgt.eos_id,
             sos_id=tgt.sos_id,
+            rnn_cell="lstm",
         )
         seq2seq = Seq2seq(encoder, decoder)
         if torch.cuda.is_available():
             seq2seq.cuda()
 
         for param in seq2seq.parameters():
-            param.data.xavier_uniform_()
+            param.data.uniform_(-0.08, 0.08)
 
         # Optimizer and learning rate scheduler can be customized by
         # explicitly constructing the objects and pass to the trainer.
@@ -167,10 +169,13 @@ else:
     )
 
 predictor = Predictor(seq2seq, input_vocab, output_vocab)
-loss, acc = Evaluator(loss=loss).evaluate(seq2seq, torchtext.data.TabularDataset(
-    path=opt.test_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
-))
-logging.info('Loss: {}, Acc: {}'.format(loss, acc))
+loss, acc = Evaluator(loss=loss).evaluate(
+    seq2seq,
+    torchtext.data.TabularDataset(
+        path=opt.test_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
+    ),
+)
+logging.info("Loss: {}, Acc: {}".format(loss, acc))
 
 while True:
     seq_str = input("Type in a source sequence:")
