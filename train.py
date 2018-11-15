@@ -98,12 +98,6 @@ else:
     input_vocab = src.vocab
     output_vocab = tgt.vocab
 
-    # NOTE: If the source field name and the target field name
-    # are different from 'src' and 'tgt' respectively, they have
-    # to be set explicitly before any training or inference
-    # seq2seq.src_field_name = 'src'
-    # seq2seq.tgt_field_name = 'tgt'
-
     # Prepare loss
     weight = torch.ones(len(tgt.vocab))
     pad = tgt.vocab.stoi[tgt.pad_token]
@@ -162,10 +156,9 @@ else:
     seq2seq = t.train(
         seq2seq,
         train,
-        
         num_epochs=6,
         optimizer=optimizer,
-        teacher_forcing_ratio=0.5,
+        teacher_forcing_ratio=0,  # 0.5,
         resume=opt.resume,
     )
 
