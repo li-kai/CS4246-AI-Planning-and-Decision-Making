@@ -10,7 +10,6 @@ from torch import optim
 
 import seq2seq
 from seq2seq.evaluator import Evaluator
-from seq2seq.loss import BLEUoss
 from seq2seq.optim import Optimizer
 from seq2seq.util.checkpoint import Checkpoint
 
@@ -22,15 +21,15 @@ class ReinforcementTrainer(object):
     Args:
         expt_dir (optional, str): experiment Directory to store details of the experiment,
             by default it makes a folder in the current directory to store the details (default: `experiment`).
-        loss (seq2seq.loss.loss.Loss, optional): loss for training, (default: seq2seq.loss.BLEUoss)
+        loss (seq2seq.loss.loss.Loss, optional): loss for training, (default: seq2seq.loss.BLEULoss)
         batch_size (int, optional): batch size for experiment, (default: 64)
         checkpoint_every (int, optional): number of batches to checkpoint after, (default: 100)
     """
 
     def __init__(
         self,
+        loss,
         expt_dir="experiment",
-        loss=BLEUoss(),
         batch_size=64,
         random_seed=None,
         checkpoint_every=100,
@@ -66,7 +65,7 @@ class ReinforcementTrainer(object):
     ):
         loss = self.loss
         # Forward propagation
-        decoder_outputs, sampled_outputs, decoder_hidden, other = model(
+        decoder_outputs, decoder_hidden, other = model(
             input_variable,
             input_lengths,
             target_variable,
@@ -74,14 +73,13 @@ class ReinforcementTrainer(object):
         )
         # Get loss
         loss.reset()
-        batch_size = target_variable.size(0)
-        for step, output in enumerate(zip(decoder_outputs, sampled_outputs)):
-            step_output, sampled_output = output
-            loss.eval_batch(
-                step_output.contiguous().view(batch_size, -1),
-                sampled_output.contiguous().view(batch_size, -1),
-                target_variable[:, step + 1],
-            )
+        loss.eval_batch(
+            decoder_outputs,
+            other["sequence"],
+            other["sampled"],
+            other["length"],
+            target_variable,
+        )
         # Backward propagation
         model.zero_grad()
         loss.backward()

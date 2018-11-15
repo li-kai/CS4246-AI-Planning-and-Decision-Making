@@ -65,6 +65,7 @@ class RDecoderRNN(BaseRNN):
     KEY_ATTN_SCORE = "attention_score"
     KEY_LENGTH = "length"
     KEY_SEQUENCE = "sequence"
+    KEY_SAMPLED_SEQUENCE = "sampled"
 
     def __init__(
         self,
@@ -125,16 +126,10 @@ class RDecoderRNN(BaseRNN):
         predicted_softmax = function(output, dim=1).view(batch_size, output_size, -1)
 
         soft_max = F.softmax(output, dim=1).view(batch_size, output_size, -1)
-        # print(soft_max)
-        predicted_multinomial = torch.multinomial(soft_max, output_size)
-        predicted_multinomial = predicted_multinomial.view(batch_size, output_size, -1)
-        if predicted_multinomial.sum() > 0:
-            print("output", output.size())
-            print("soft_max", soft_max.size())
-            print("predicted_multinomial", predicted_multinomial.size())
-            print("predicted_multinomial", predicted_multinomial.view(-1))
+        multinomial_sample = torch.multinomial(soft_max, output_size, replacement=True)
+        multinomial_sample = multinomial_sample.view(batch_size, output_size, -1)
 
-        return predicted_softmax, predicted_multinomial, hidden, attn
+        return predicted_softmax, multinomial_sample, hidden, attn
 
     def forward(
         self,
@@ -156,17 +151,17 @@ class RDecoderRNN(BaseRNN):
         use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
 
         decoder_outputs = []
-        sampled_outputs = []
         sequence_symbols = []
+        sampled_symbols = []
         lengths = np.array([max_length] * batch_size)
 
-        def decode(step, step_output, step_sampled_output, step_attn):
+        def decode(step, step_output, step_sampled, step_attn):
             decoder_outputs.append(step_output)
-            sampled_outputs.append(step_sampled_output)
             if self.use_attention:
                 ret_dict[RDecoderRNN.KEY_ATTN_SCORE].append(step_attn)
-            symbols = step_output.topk(1)[1]
+            symbols = step_output.argmax(dim=1, keepdim=True)
             sequence_symbols.append(symbols)
+            sampled_symbols.append(step_sampled)
 
             eos_batches = symbols.data.eq(self.eos_id)
             if eos_batches.dim() > 0:
@@ -203,9 +198,10 @@ class RDecoderRNN(BaseRNN):
                 decoder_input = symbols
 
         ret_dict[RDecoderRNN.KEY_SEQUENCE] = sequence_symbols
+        ret_dict[RDecoderRNN.KEY_SAMPLED_SEQUENCE] = sampled_symbols
         ret_dict[RDecoderRNN.KEY_LENGTH] = lengths.tolist()
 
-        return decoder_outputs, sampled_outputs, decoder_hidden, ret_dict
+        return decoder_outputs, decoder_hidden, ret_dict
 
     def _init_state(self, encoder_hidden):
         """ Initialize the encoder hidden state. """
