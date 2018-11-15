@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 import torch.nn.functional as F
+import torch.distributions as D
 
 from .attention import Attention
 from .baseRNN import BaseRNN
@@ -64,6 +65,7 @@ class DecoderRNN(BaseRNN):
     KEY_ATTN_SCORE = "attention_score"
     KEY_LENGTH = "length"
     KEY_SEQUENCE = "sequence"
+    KEY_SAMPLED_SEQUENCE = "sampled"
 
     def __init__(
         self,
@@ -120,10 +122,14 @@ class DecoderRNN(BaseRNN):
         if self.use_attention:
             output, attn = self.attention(output, encoder_outputs)
 
-        predicted_softmax = function(
-            self.out(output.contiguous().view(-1, self.hidden_size)), dim=1
-        ).view(batch_size, output_size, -1)
-        return predicted_softmax, hidden, attn
+        output = self.out(output.contiguous().view(-1, self.hidden_size))
+        predicted_softmax = function(output, dim=1).view(batch_size, output_size, -1)
+
+        soft_max = F.softmax(output, dim=1).view(batch_size, output_size, -1)
+        multinomial_sample = torch.multinomial(soft_max, output_size, replacement=True)
+        multinomial_sample = multinomial_sample.view(batch_size, output_size, -1)
+
+        return predicted_softmax, multinomial_sample, hidden, attn
 
     def forward(
         self,
@@ -146,14 +152,16 @@ class DecoderRNN(BaseRNN):
 
         decoder_outputs = []
         sequence_symbols = []
+        sampled_symbols = []
         lengths = np.array([max_length] * batch_size)
 
-        def decode(step, step_output, step_attn):
+        def decode(step, step_output, step_sampled, step_attn):
             decoder_outputs.append(step_output)
             if self.use_attention:
                 ret_dict[DecoderRNN.KEY_ATTN_SCORE].append(step_attn)
-            symbols = decoder_outputs[-1].topk(1)[1]
+            symbols = step_output.argmax(dim=1, keepdim=True)
             sequence_symbols.append(symbols)
+            sampled_symbols.append(step_sampled)
 
             eos_batches = symbols.data.eq(self.eos_id)
             if eos_batches.dim() > 0:
@@ -166,28 +174,31 @@ class DecoderRNN(BaseRNN):
         # If teacher_forcing_ratio is True or False instead of a probability, the unrolling can be done in graph
         if use_teacher_forcing:
             decoder_input = inputs[:, :-1]
-            decoder_output, decoder_hidden, attn = self.forward_step(
+            decoder_output, sampled_output, decoder_hidden, attn = self.forward_step(
                 decoder_input, decoder_hidden, encoder_outputs, function=function
             )
 
             for di in range(decoder_output.size(1)):
                 step_output = decoder_output[:, di, :]
+                step_sampled = sampled_output[:, di, :]
                 if attn is not None:
                     step_attn = attn[:, di, :]
                 else:
                     step_attn = None
-                decode(di, step_output, step_attn)
+                decode(di, step_output, step_sampled, step_attn)
         else:
             decoder_input = inputs[:, 0].unsqueeze(1)
             for di in range(max_length):
-                decoder_output, decoder_hidden, step_attn = self.forward_step(
+                decoder_output, sampled_output, decoder_hidden, step_attn = self.forward_step(
                     decoder_input, decoder_hidden, encoder_outputs, function=function
                 )
                 step_output = decoder_output.squeeze(1)
-                symbols = decode(di, step_output, step_attn)
+                step_sampled = sampled_output.squeeze(1)
+                symbols = decode(di, step_output, step_sampled, step_attn)
                 decoder_input = symbols
 
         ret_dict[DecoderRNN.KEY_SEQUENCE] = sequence_symbols
+        ret_dict[DecoderRNN.KEY_SAMPLED_SEQUENCE] = sampled_symbols
         ret_dict[DecoderRNN.KEY_LENGTH] = lengths.tolist()
 
         return decoder_outputs, decoder_hidden, ret_dict
