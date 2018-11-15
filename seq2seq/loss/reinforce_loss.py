@@ -61,10 +61,12 @@ class BLEULoss(NLLLoss):
         acc_loss = torch.zeros((batch_size, 1)).cpu()
 
         for i in range(seq_length):
-            acc_loss += torch.gather(outputs[i], 1, sampled[i])
+            outputs[i] = outputs[i].cpu()
+            sampled[i] = sampled[i].cpu()
+            acc_loss -= torch.gather(outputs[i], 1, sampled[i])
 
         acc_loss = acc_loss.squeeze()
-        self.acc_loss = -self.acc_loss.mean()
+        self.acc_loss = acc_loss.mean()
         self.norm_term = batch_size
 
     def reinforce_eval_batch(self, outputs, greedy, sampled, lengths, target):
