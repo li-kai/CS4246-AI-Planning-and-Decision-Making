@@ -49,15 +49,15 @@ class Seq2seq(nn.Module):
         input_variable,
         input_lengths=None,
         target_variable=None,
-        teacher_forcing_ratio=0,
+        use_teacher_forcing=False,
     ):
         encoder_outputs, encoder_hidden = self.encoder(input_variable, input_lengths)
-        result = self.decoder( # decoder forward
+        result = self.decoder(  # decoder forward
             inputs=target_variable,
             encoder_hidden=encoder_hidden,
             encoder_outputs=encoder_outputs,
             function=self.decode_function,
             target_variable=target_variable,
-            teacher_forcing_ratio=teacher_forcing_ratio,
+            use_teacher_forcing=use_teacher_forcing,
         )
         return result

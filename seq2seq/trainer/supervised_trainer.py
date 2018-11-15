@@ -67,7 +67,7 @@ class SupervisedTrainer(object):
 
         loss = self.loss
         # Forward propagation
-        decoder_outputs, decoder_hidden, other = model(
+        decoder_outputs, decoder_hidden, other = model(  # seq2seq
             input_variable,
             input_lengths,
             target_variable,
