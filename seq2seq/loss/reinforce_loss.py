@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from nltk.translate.gleu_score import sentence_gleu
 from .loss import NLLLoss
 
 
@@ -37,6 +38,16 @@ class BLEULoss(NLLLoss):
 
     def dup_percentage(self, input):
         return len(set(input)) / len(input)
+
+    def matrix_gleu(self, matrix, targets):
+        scores = []
+        for i in range(len(matrix)):
+            source_sentence = matrix[i]
+            target_sentence = targets[i]
+            x = sentence_gleu([target_sentence], source_sentence)
+            scores.append(x * self.dup_percentage(source_sentence))
+        # print("->", scores)
+        return torch.FloatTensor(scores)
 
     def matrix_bleu(self, matrix, targets):
         scores = []
@@ -88,8 +99,8 @@ class BLEULoss(NLLLoss):
         print(" ".join(target_sentences[0]))
         print("==========================================")
 
-        sampled_bleu = self.matrix_bleu(sampled_sentences, target_sentences)
-        greedy_bleu = self.matrix_bleu(greedy_sentences, target_sentences)
+        sampled_bleu = self.matrix_gleu(sampled_sentences, target_sentences)
+        greedy_bleu = self.matrix_gleu(greedy_sentences, target_sentences)
         # print(acc_loss)
         # print((greedy_bleu - sampled_bleu))
 
