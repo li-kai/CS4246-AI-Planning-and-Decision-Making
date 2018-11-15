@@ -17,6 +17,8 @@ class BLEULoss(NLLLoss):
 
     def __init__(self, tgt_vocab, weight=None, mask=None):
         super(BLEULoss, self).__init__(weight=weight, mask=mask)
+        self.mask = mask
+        self.weight = weight
         self.tgt_vocab = tgt_vocab
         self.itos = tgt_vocab.itos.__getitem__
         self.smoothing = SmoothingFunction()
@@ -34,6 +36,7 @@ class BLEULoss(NLLLoss):
     def reset(self):
         self.sampled_sentence = []
         self.greedy_sentence = []
+        self.acc_loss = 0
 
     def indices_to_words(self, inputs, keep_mask=False):
         result = []
@@ -56,14 +59,14 @@ class BLEULoss(NLLLoss):
         # print("->", scores)
         return torch.FloatTensor(scores)
 
-    def teacher_forcing_eval_batch(self, outputs, greedy, sampled, lengths, target):
-        batch_size, seq_length = target.size(0), len(outputs)
+    def teacher_forcing_eval_batch(self, outputs, greedy, sampled, lengths, targets):
+        batch_size, seq_length = targets.size(0), len(outputs)
         acc_loss = torch.zeros((batch_size, 1)).cpu()
 
         for i in range(seq_length):
-            outputs[i] = outputs[i].cpu()
-            sampled[i] = sampled[i].cpu()
-            acc_loss -= torch.gather(outputs[i], 1, sampled[i])
+            output = outputs[i].cpu()
+            target = targets[:,i].cpu().view(64, -1)
+            acc_loss -= torch.gather(output, 1, target)
 
         acc_loss = acc_loss.squeeze()
         self.acc_loss = acc_loss.mean()
