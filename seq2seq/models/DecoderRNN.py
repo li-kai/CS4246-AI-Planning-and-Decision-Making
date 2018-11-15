@@ -141,7 +141,7 @@ class DecoderRNN(BaseRNN):
         encoder_outputs=None,
         function=F.log_softmax,
         target_variable=None,
-        teacher_forcing_ratio=0,
+        use_teacher_forcing=False,
     ):
         ret_dict = dict()
         if self.use_attention:
@@ -151,8 +151,6 @@ class DecoderRNN(BaseRNN):
             inputs, encoder_hidden, encoder_outputs, function, teacher_forcing_ratio
         )
         decoder_hidden = self._init_state(encoder_hidden)
-
-        use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
 
         decoder_outputs = []
         sequence_symbols = []
@@ -239,7 +237,7 @@ class DecoderRNN(BaseRNN):
         return h
 
     def _validate_args(
-        self, inputs, encoder_hidden, encoder_outputs, function, teacher_forcing_ratio
+        self, inputs, encoder_hidden, encoder_outputs, function, use_teacher_forcing
     ):
         if self.use_attention:
             if encoder_outputs is None:
@@ -261,7 +259,7 @@ class DecoderRNN(BaseRNN):
 
         # set default input and max decoding length
         if inputs is None:
-            if teacher_forcing_ratio > 0:
+            if use_teacher_forcing:
                 raise ValueError(
                     "Teacher forcing has to be disabled (set 0) when no inputs is provided."
                 )

@@ -63,13 +63,15 @@ class SupervisedTrainer(object):
         model,
         teacher_forcing_ratio,
     ):
+        use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
+
         loss = self.loss
         # Forward propagation
         decoder_outputs, decoder_hidden, other = model(
             input_variable,
             input_lengths,
             target_variable,
-            teacher_forcing_ratio=teacher_forcing_ratio,
+            use_teacher_forcing=use_teacher_forcing,
         )
         # Get loss
         loss.reset()
@@ -79,6 +81,7 @@ class SupervisedTrainer(object):
             other["sampled"],
             other["length"],
             target_variable,
+            use_teacher_forcing,
         )
         # Backward propagation
         model.zero_grad()

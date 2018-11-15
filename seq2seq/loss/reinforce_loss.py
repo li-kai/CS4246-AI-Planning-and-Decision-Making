@@ -56,7 +56,7 @@ class BLEULoss(NLLLoss):
         # print("->", scores)
         return torch.FloatTensor(scores)
 
-    def eval_batch(self, outputs, greedy, sampled, lengths, target):
+    def eval_batch(self, outputs, greedy, sampled, lengths, target, use_teacher_forcing):
         # iter through time step
         # optimisation: do in matrix form
         batch_size, seq_length = target.size(0), len(outputs)
