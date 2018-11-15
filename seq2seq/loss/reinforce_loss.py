@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from .loss import NLLLoss
 
 
@@ -18,45 +18,74 @@ class BLEULoss(NLLLoss):
     def __init__(self, tgt_vocab, weight=None, mask=None):
         super(BLEULoss, self).__init__(weight=weight, mask=mask)
         self.tgt_vocab = tgt_vocab
-        self.itos = np.vectorize(tgt_vocab.itos.__getitem__)
+        self.itos = tgt_vocab.itos.__getitem__
+        self.smoothing = SmoothingFunction()
         self.sampled_sentence = []
         self.greedy_sentence = []
+
+    def get_loss(self):
+        if isinstance(self.acc_loss, int):
+            return 0
+        # total loss for all batches
+        loss = self.acc_loss
+        # loss /= self.norm_term
+        return loss
 
     def reset(self):
         self.sampled_sentence = []
         self.greedy_sentence = []
 
-    def matrix_to_sentences(self, input):
-        return self.itos(input)
+    def indices_to_words(self, input):
+        return [self.itos(x) for x in input if x != self.mask]
+
+    def matrix_bleu(self, matrix, targets, lengths):
+        scores = []
+        for i in range(len(matrix)):
+            source_sentence = matrix[i]
+            target_sentence = targets[i]
+            x = sentence_bleu(
+                [target_sentence],
+                source_sentence,
+                smoothing_function=self.smoothing.method1,
+            )
+            scores.append(x)
+        # print("->", scores)
+        return torch.FloatTensor(scores)
 
     def eval_batch(self, outputs, greedy, sampled, lengths, target):
         # iter through time step
         # optimisation: do in matrix form
         batch_size, seq_length = target.size(0), len(outputs)
-        acc_loss = torch.zeros((batch_size, seq_length))
-        target_sentences = self.matrix_to_sentences(target)
+        acc_loss = torch.zeros((batch_size, 1))
+
+        target_sentences = [self.indices_to_words(sentence) for sentence in target]
         greedy_sentences = []
         sampled_sentences = []
 
-        for i in range(len(outputs)):
-            greedy_sentences.append(self.matrix_to_sentences(greedy[i]))
-            sampled_sentences.append(self.matrix_to_sentences(sampled[i]))
+        for i in range(seq_length):
+            greedy_batch = self.indices_to_words(greedy[i])
+            greedy_sentences.append([[x] for x in greedy_batch])
+            sampled_batch = self.indices_to_words(sampled[i])
+            sampled_sentences.append([[x] for x in sampled_batch])
             acc_loss += torch.gather(outputs[i], 1, sampled[i])
-
         greedy_sentences = np.concatenate(greedy_sentences, axis=1)
         sampled_sentences = np.concatenate(sampled_sentences, axis=1)
+        # print(greedy_sentences[0])
+        # print(sampled_sentences[0])
 
-        print("------------------------------------------")
-        print(greedy_sentences.shape)
-        print(acc_loss.size())
-        print(greedy_sentences)
-        print("------------------------------------------")
-        print(sampled_sentences)
-        print("------------------------------------------")
-        print(target_sentences)
-        print("==========================================")
-        greedy_bleu = sentence_bleu(greedy_sentences, target_sentences)
-        sampled_bleu = sentence_bleu(sampled_sentences, target_sentences)
-        print(sampled_bleu, greedy_bleu)
-        self.acc_loss = (sampled_bleu - greedy_bleu) * acc_loss
+        sampled_bleu = self.matrix_bleu(sampled_sentences, target_sentences, lengths)
+        greedy_bleu = self.matrix_bleu(greedy_sentences, target_sentences, lengths)
+        acc_loss = acc_loss.squeeze()
+        # print("==========================================")
+        # print(sampled_bleu)
+        # print(greedy_bleu)
+        # print(acc_loss)
+        # print((greedy_bleu - sampled_bleu))
+
+        # (sample - greedy) should be positive (we want to go towards sampled)
+        # loss should be positive, which we want to minimize
+        # so we flip (sample - greedy) into (greedy - sample)
+        self.acc_loss = (greedy_bleu - sampled_bleu) * acc_loss
+        self.acc_loss = self.acc_loss.mean()
+        # print(self.acc_loss)
         self.norm_term = batch_size

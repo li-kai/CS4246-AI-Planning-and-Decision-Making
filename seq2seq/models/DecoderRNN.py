@@ -126,11 +126,11 @@ class DecoderRNN(BaseRNN):
         predicted_softmax = function(output, dim=1).view(batch_size, output_size, -1)
 
         soft_max = F.softmax(output, dim=1).view(batch_size, output_size, -1)
-        multinomial_sample = torch.multinomial(soft_max, output_size, replacement=True)
-        multinomial_sample = multinomial_sample.view(batch_size, output_size, -1)
-        x = torch.multinomial(soft_max, 1, replacement=True).view(
-            batch_size, output_size, -1
-        )
+        # multinomial_sample = torch.multinomial(soft_max, output_size, replacement=True)
+        # multinomial_sample = multinomial_sample.view(batch_size, output_size, -1)
+        x = torch.multinomial(soft_max, 1, replacement=True).view(batch_size, 1, -1)
+        # print("soft_max", soft_max)
+        # print("x", x)
 
         return predicted_softmax, x, hidden, attn
 
@@ -140,6 +140,7 @@ class DecoderRNN(BaseRNN):
         encoder_hidden=None,
         encoder_outputs=None,
         function=F.log_softmax,
+        target_variable=None,
         teacher_forcing_ratio=0,
     ):
         ret_dict = dict()
@@ -176,19 +177,32 @@ class DecoderRNN(BaseRNN):
         # Manual unrolling is used to support random teacher forcing.
         # If teacher_forcing_ratio is True or False instead of a probability, the unrolling can be done in graph
         if use_teacher_forcing:
-            decoder_input = inputs[:, :-1]
-            decoder_output, sampled_output, decoder_hidden, attn = self.forward_step(
-                decoder_input, decoder_hidden, encoder_outputs, function=function
-            )
+            decoder_input = inputs[:, 0].unsqueeze(1)
+            for di in range(max_length):
+                decoder_output, sampled_output, decoder_hidden, step_attn = self.forward_step(
+                    decoder_input, decoder_hidden, encoder_outputs, function=function
+                )
+                step_output = decoder_output.squeeze(1)
+                step_sampled = sampled_output.squeeze(1)
+                symbols = decode(di, step_output, step_sampled, step_attn)
+                decoder_input = target_variable[:, di].unsqueeze(1)
+            # decoder_input = inputs[:, :-1]
+            # decoder_output, sampled_output, decoder_hidden, attn = self.forward_step(
+            #     decoder_input, decoder_hidden, encoder_outputs, function=function
+            # )
 
-            for di in range(decoder_output.size(1)):
-                step_output = decoder_output[:, di, :]
-                step_sampled = sampled_output[:, di, :]
-                if attn is not None:
-                    step_attn = attn[:, di, :]
-                else:
-                    step_attn = None
-                decode(di, step_output, step_sampled, step_attn)
+            # for di in range(decoder_output.size(1)):
+            #     # decoder_output -> batch_size, output_size, -1
+            #     step_output = decoder_output[:, di, :]
+            #     # step_output -> batch_size, -1
+            #     print("step", step_output.size()) # [ [1], [2], [3] ] -> [1,2,3]
+            #     print("sampled_output", sampled_output.size())
+            #     step_sampled = sampled_output[:, di, :]
+            #     if attn is not None:
+            #         step_attn = attn[:, di, :]
+            #     else:
+            #         step_attn = None
+            #     decode(di, step_output, step_sampled, step_attn)
         else:
             decoder_input = inputs[:, 0].unsqueeze(1)
             for di in range(max_length):
