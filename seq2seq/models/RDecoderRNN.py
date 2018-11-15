@@ -121,18 +121,20 @@ class RDecoderRNN(BaseRNN):
         if self.use_attention:
             output, attn = self.attention(output, encoder_outputs)
 
-        predicted_softmax = function(
-            self.out(output.contiguous().view(-1, self.hidden_size)), dim=1
-        ).view(batch_size, output_size, -1)
-        sampled = (
-            D.Categorical(
-                probs=self.out(output.contiguous().view(-1, self.hidden_size))
-            )
-            .sample()
-            .view(batch_size, output_size, -1)
-        )
+        output = self.out(output.contiguous().view(-1, self.hidden_size))
+        predicted_softmax = function(output, dim=1).view(batch_size, output_size, -1)
 
-        return predicted_softmax, hidden, attn, sampled
+        soft_max = F.softmax(output, dim=1).view(batch_size, output_size, -1)
+        # print(soft_max)
+        predicted_multinomial = torch.multinomial(soft_max, output_size)
+        predicted_multinomial = predicted_multinomial.view(batch_size, output_size, -1)
+        if predicted_multinomial.sum() > 0:
+            print("output", output.size())
+            print("soft_max", soft_max.size())
+            print("predicted_multinomial", predicted_multinomial.size())
+            print("predicted_multinomial", predicted_multinomial.view(-1))
+
+        return predicted_softmax, predicted_multinomial, hidden, attn
 
     def forward(
         self,
@@ -163,7 +165,7 @@ class RDecoderRNN(BaseRNN):
             sampled_outputs.append(step_sampled_output)
             if self.use_attention:
                 ret_dict[RDecoderRNN.KEY_ATTN_SCORE].append(step_attn)
-            symbols = decoder_outputs[-1].topk(1)[1]
+            symbols = step_output.topk(1)[1]
             sequence_symbols.append(symbols)
 
             eos_batches = symbols.data.eq(self.eos_id)
@@ -177,7 +179,7 @@ class RDecoderRNN(BaseRNN):
         # If teacher_forcing_ratio is True or False instead of a probability, the unrolling can be done in graph
         if use_teacher_forcing:
             decoder_input = inputs[:, :-1]
-            decoder_output, decoder_hidden, attn, sampled_output = self.forward_step(
+            decoder_output, sampled_output, decoder_hidden, attn = self.forward_step(
                 decoder_input, decoder_hidden, encoder_outputs, function=function
             )
 
@@ -192,7 +194,7 @@ class RDecoderRNN(BaseRNN):
         else:
             decoder_input = inputs[:, 0].unsqueeze(1)
             for di in range(max_length):
-                decoder_output, decoder_hidden, step_attn, sampled_output = self.forward_step(
+                decoder_output, sampled_output, decoder_hidden, step_attn = self.forward_step(
                     decoder_input, decoder_hidden, encoder_outputs, function=function
                 )
                 step_output = decoder_output.squeeze(1)

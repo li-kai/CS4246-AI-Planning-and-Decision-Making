@@ -10,7 +10,7 @@ from torch import optim
 
 import seq2seq
 from seq2seq.evaluator import Evaluator
-from seq2seq.loss import NLLLoss
+from seq2seq.loss import BLEUoss
 from seq2seq.optim import Optimizer
 from seq2seq.util.checkpoint import Checkpoint
 
@@ -22,7 +22,7 @@ class ReinforcementTrainer(object):
     Args:
         expt_dir (optional, str): experiment Directory to store details of the experiment,
             by default it makes a folder in the current directory to store the details (default: `experiment`).
-        loss (seq2seq.loss.loss.Loss, optional): loss for training, (default: seq2seq.loss.NLLLoss)
+        loss (seq2seq.loss.loss.Loss, optional): loss for training, (default: seq2seq.loss.BLEUoss)
         batch_size (int, optional): batch size for experiment, (default: 64)
         checkpoint_every (int, optional): number of batches to checkpoint after, (default: 100)
     """
@@ -30,7 +30,7 @@ class ReinforcementTrainer(object):
     def __init__(
         self,
         expt_dir="experiment",
-        loss=NLLLoss(),
+        loss=BLEUoss(),
         batch_size=64,
         random_seed=None,
         checkpoint_every=100,

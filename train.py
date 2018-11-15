@@ -9,7 +9,7 @@ import torchtext
 import seq2seq
 from seq2seq.trainer import ReinforcementTrainer
 from seq2seq.models import EncoderRNN, RDecoderRNN, Seq2seq
-from seq2seq.loss import NLLLoss
+from seq2seq.loss import BLEUoss
 from seq2seq.optim import Optimizer
 from seq2seq.dataset import SourceField, TargetField
 from seq2seq.evaluator import Predictor, Evaluator
@@ -83,7 +83,7 @@ if opt.load_checkpoint is not None:
 
     weight = torch.ones(len(tgt.vocab))
     pad = tgt.vocab.stoi[tgt.pad_token]
-    loss = NLLLoss(weight, pad)
+    loss = BLEUoss(weight, pad)
 else:
     # Prepare dataset
     src = SourceField(sequential=True, use_vocab=True)
@@ -107,7 +107,7 @@ else:
     # Prepare loss
     weight = torch.ones(len(tgt.vocab))
     pad = tgt.vocab.stoi[tgt.pad_token]
-    loss = NLLLoss(weight, pad)
+    loss = BLEUoss(weight, pad)
 
     seq2seq = None
     optimizer = None
@@ -153,7 +153,7 @@ else:
     # train
     t = ReinforcementTrainer(
         loss=loss,
-        batch_size=64,
+        batch_size=32,
         checkpoint_every=50,
         print_every=10,
         expt_dir=EXPERIMENT_PATH,
@@ -164,7 +164,7 @@ else:
         train,
         num_epochs=6,
         optimizer=optimizer,
-        teacher_forcing_ratio=0.5,
+        teacher_forcing_ratio=0,  # 0.5,
         resume=opt.resume,
     )
 

@@ -15,12 +15,15 @@ class BLEUoss(NLLLoss):
 
     def __init__(self, weight=None, mask=None):
         super(BLEUoss, self).__init__(weight=weight, mask=mask)
-        self.softmax = 
 
     def eval_batch(self, outputs, sampled_outputs, target):
         # TODO: pass in sampled output
         # TODO: turn weight into words
-        sampled_bleu = corpus_bleu(outputs, target)
-        greedy_bleu = corpus_bleu(outputs, target)
-        acc_loss = (sampled_bleu - greedy_bleu) * self.criterion(outputs, target)
+        print(outputs)
+        print(sampled_outputs)
+        # sampled_bleu = corpus_bleu(outputs, target)
+        # greedy_bleu = corpus_bleu(outputs, target)
+        acc_loss = self.criterion(outputs, target)
+        # acc_loss *= (sampled_bleu - greedy_bleu)
         self.acc_loss += acc_loss
+        self.norm_term += 1
