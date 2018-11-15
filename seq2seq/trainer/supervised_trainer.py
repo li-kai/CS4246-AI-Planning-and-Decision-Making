@@ -15,7 +15,7 @@ from seq2seq.optim import Optimizer
 from seq2seq.util.checkpoint import Checkpoint
 
 
-TEACHER_FORCING_RATIO_HALF_LIFE = 300
+TEACHER_FORCING_RATIO_HALF_LIFE = 500
 
 class SupervisedTrainer(object):
     """ The SupervisedTrainer class helps in setting up a training framework in a
@@ -64,9 +64,8 @@ class SupervisedTrainer(object):
         input_lengths,
         target_variable,
         model,
-        teacher_forcing_ratio,
+        use_teacher_forcing,
     ):
-        use_teacher_forcing = random.random() < teacher_forcing_ratio
 
         loss = self.loss
         # Forward propagation
@@ -142,6 +141,8 @@ class SupervisedTrainer(object):
                 if teacher_forcing_decay:
                     effective_forcing_ratio = teacher_forcing_ratio * math.exp(-step * math.log(2)/TEACHER_FORCING_RATIO_HALF_LIFE)
 
+                use_teacher_forcing = random.random() < effective_forcing_ratio
+
                 input_variables, input_lengths = getattr(batch, seq2seq.src_field_name)
                 target_variables = getattr(batch, seq2seq.tgt_field_name)
 
@@ -150,7 +151,7 @@ class SupervisedTrainer(object):
                     input_lengths.tolist(),
                     target_variables,
                     model,
-                    effective_forcing_ratio,
+                    use_teacher_forcing,
                 )
 
                 # Record average loss
@@ -160,10 +161,11 @@ class SupervisedTrainer(object):
                 if step % self.print_every == 0 and step_elapsed > self.print_every:
                     print_loss_avg = print_loss_total / self.print_every
                     print_loss_total = 0
-                    log_msg = "Forcing Ratio %.4f, Progress: %d%%, Train %s: %.4f" % (
+                    log_msg = "Forcing Ratio %.4f, Progress: %d%%, Train %s (%s): %.4f" % (
                         effective_forcing_ratio,
                         step / total_steps * 100,
                         self.loss.name,
+                        "forcing" if use_teacher_forcing else "RL",
                         print_loss_avg,
                     )
                     log.info(log_msg)
