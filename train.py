@@ -165,8 +165,9 @@ else:
         
         num_epochs=6,
         optimizer=optimizer,
-        teacher_forcing_ratio=0.5,
+        teacher_forcing_ratio=1,
         resume=opt.resume,
+        teacher_forcing_decay=True,
     )
 
 predictor = Predictor(seq2seq, input_vocab, output_vocab)

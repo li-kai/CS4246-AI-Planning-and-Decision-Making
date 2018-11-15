@@ -148,7 +148,7 @@ class DecoderRNN(BaseRNN):
             ret_dict[DecoderRNN.KEY_ATTN_SCORE] = list()
 
         inputs, batch_size, max_length = self._validate_args(
-            inputs, encoder_hidden, encoder_outputs, function, teacher_forcing_ratio
+            inputs, encoder_hidden, encoder_outputs, function, use_teacher_forcing
         )
         decoder_hidden = self._init_state(encoder_hidden)
 
