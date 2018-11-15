@@ -31,8 +31,8 @@ class TargetField(torchtext.data.Field):
         eos_id: index of the end of sentence symbol
     """
 
-    SYM_SOS = "<sos>"
-    SYM_EOS = "<eos>"
+    SYM_SOS = u"始"
+    SYM_EOS = u"终"
 
     def __init__(self, **kwargs):
         logger = logging.getLogger(__name__)
