@@ -153,7 +153,7 @@ else:
     # train
     t = SupervisedTrainer(
         loss=loss,
-        batch_size=32,
+        batch_size=64,
         checkpoint_every=50,
         print_every=10,
         expt_dir=EXPERIMENT_PATH,

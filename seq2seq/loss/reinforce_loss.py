@@ -35,8 +35,12 @@ class BLEULoss(NLLLoss):
         self.sampled_sentence = []
         self.greedy_sentence = []
 
-    def indices_to_words(self, input):
-        return [self.itos(x) for x in input if x != self.mask]
+    def indices_to_words(self, inputs, keep_mask=False):
+        result = []
+        for x in inputs:
+            if x != self.mask or keep_mask:
+                result.append(self.itos(x))
+        return result
 
     def matrix_bleu(self, matrix, targets, lengths):
         scores = []
@@ -56,18 +60,21 @@ class BLEULoss(NLLLoss):
         # iter through time step
         # optimisation: do in matrix form
         batch_size, seq_length = target.size(0), len(outputs)
-        acc_loss = torch.zeros((batch_size, 1))
+        acc_loss = torch.zeros((batch_size, 1)).cpu()
 
         target_sentences = [self.indices_to_words(sentence) for sentence in target]
         greedy_sentences = []
         sampled_sentences = []
 
         for i in range(seq_length):
-            greedy_batch = self.indices_to_words(greedy[i])
+            greedy_batch = self.indices_to_words(greedy[i], keep_mask=True)
             greedy_sentences.append([[x] for x in greedy_batch])
-            sampled_batch = self.indices_to_words(sampled[i])
+            sampled_batch = self.indices_to_words(sampled[i], keep_mask=True)
             sampled_sentences.append([[x] for x in sampled_batch])
+            outputs[i] = outputs[i].cpu()
+            sampled[i] = sampled[i].cpu()
             acc_loss += torch.gather(outputs[i], 1, sampled[i])
+
         greedy_sentences = np.concatenate(greedy_sentences, axis=1)
         sampled_sentences = np.concatenate(sampled_sentences, axis=1)
         # print(greedy_sentences[0])
