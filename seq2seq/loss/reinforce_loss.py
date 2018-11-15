@@ -65,7 +65,7 @@ class BLEULoss(NLLLoss):
 
         for i in range(seq_length):
             output = outputs[i].cpu()
-            target = targets[:,i].cpu().view(64, -1)
+            target = targets[:,i].cpu().view(batch_size, -1)
             acc_loss -= torch.gather(output, 1, target)
 
         acc_loss = acc_loss.squeeze()
