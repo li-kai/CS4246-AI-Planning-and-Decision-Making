@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from nltk.translate.bleu_score import corpus_bleu
+from nltk.translate.bleu_score import sentence_bleu
 from .loss import NLLLoss
 
 
@@ -32,26 +32,31 @@ class BLEULoss(NLLLoss):
     def eval_batch(self, outputs, greedy, sampled, lengths, target):
         # iter through time step
         # optimisation: do in matrix form
-        batch_size = target.size(0)
-        acc_loss = 0
+        batch_size, seq_length = target.size(0), len(outputs)
+        acc_loss = torch.zeros((batch_size, seq_length))
         target_sentences = self.matrix_to_sentences(target)
         greedy_sentences = []
         sampled_sentences = []
+
         for i in range(len(outputs)):
             greedy_sentences.append(self.matrix_to_sentences(greedy[i]))
             sampled_sentences.append(self.matrix_to_sentences(sampled[i]))
-            acc_loss += torch.gather(outputs[i], 1, sampled[i]).sum()
+            acc_loss += torch.gather(outputs[i], 1, sampled[i])
 
         greedy_sentences = np.concatenate(greedy_sentences, axis=1)
         sampled_sentences = np.concatenate(sampled_sentences, axis=1)
+
+        print("------------------------------------------")
+        print(greedy_sentences.shape)
+        print(acc_loss.size())
         print(greedy_sentences)
         print("------------------------------------------")
         print(sampled_sentences)
         print("------------------------------------------")
         print(target_sentences)
         print("==========================================")
-        greedy_bleu = corpus_bleu(greedy_sentences, target_sentences)
-        sampled_bleu = corpus_bleu(sampled_sentences, target_sentences)
+        greedy_bleu = sentence_bleu(greedy_sentences, target_sentences)
+        sampled_bleu = sentence_bleu(sampled_sentences, target_sentences)
         print(sampled_bleu, greedy_bleu)
         self.acc_loss = (sampled_bleu - greedy_bleu) * acc_loss
         self.norm_term = batch_size

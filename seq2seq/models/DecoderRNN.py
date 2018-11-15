@@ -128,8 +128,11 @@ class DecoderRNN(BaseRNN):
         soft_max = F.softmax(output, dim=1).view(batch_size, output_size, -1)
         multinomial_sample = torch.multinomial(soft_max, output_size, replacement=True)
         multinomial_sample = multinomial_sample.view(batch_size, output_size, -1)
+        x = torch.multinomial(soft_max, 1, replacement=True).view(
+            batch_size, output_size, -1
+        )
 
-        return predicted_softmax, multinomial_sample, hidden, attn
+        return predicted_softmax, x, hidden, attn
 
     def forward(
         self,
