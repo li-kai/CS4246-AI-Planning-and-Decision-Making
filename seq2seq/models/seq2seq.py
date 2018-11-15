@@ -52,7 +52,7 @@ class Seq2seq(nn.Module):
         use_teacher_forcing=False,
     ):
         encoder_outputs, encoder_hidden = self.encoder(input_variable, input_lengths)
-        result = self.decoder( # decoder forward
+        result = self.decoder(  # decoder forward
             inputs=target_variable,
             encoder_hidden=encoder_hidden,
             encoder_outputs=encoder_outputs,
