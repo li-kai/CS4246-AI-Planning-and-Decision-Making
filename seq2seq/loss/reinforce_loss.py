@@ -35,6 +35,9 @@ class BLEULoss(NLLLoss):
         else:
             return [self.itos(x) for x in inputs if x != self.mask]
 
+    def dup_percentage(self, input):
+        return len(set(input)) / len(input)
+
     def matrix_bleu(self, matrix, targets):
         scores = []
         for i in range(len(matrix)):
@@ -45,7 +48,7 @@ class BLEULoss(NLLLoss):
                 source_sentence,
                 smoothing_function=self.smoothing.method1,
             )
-            scores.append(x)
+            scores.append(x * self.dup_percentage(source_sentence))
         # print("->", scores)
         return torch.FloatTensor(scores)
 
