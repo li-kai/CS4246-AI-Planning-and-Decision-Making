@@ -164,7 +164,8 @@ else:
         train,
         num_epochs=6,
         optimizer=optimizer,
-        teacher_forcing_ratio=0.5,
+        teacher_forcing_ratio=1,
+        teacher_forcing_half_life=500,
         resume=opt.resume,
     )
 

@@ -35,10 +35,10 @@ class BLEULoss(NLLLoss):
     def score_sentence(self, sentence, target):
         tgt = self.itos(target)
         sen = self.itos(sentence)
-        if (self.i == 0):
-            print(tgt)
-            print(sen)
-            print()
+        # if (self.i == 0):
+            # print(tgt)
+            # print(sen)
+            # print()
         self.i = 1
 
         return sentence_gleu([tgt], sen)

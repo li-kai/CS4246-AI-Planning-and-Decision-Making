@@ -3,6 +3,7 @@ import logging
 import os
 import random
 import time
+import math
 
 import torch
 import torchtext
@@ -102,6 +103,7 @@ class SupervisedTrainer(object):
         start_step,
         dev_data=None,
         teacher_forcing_ratio=0,
+        teacher_forcing_half_life=None,
     ):
         log = self.logger
 
@@ -122,6 +124,9 @@ class SupervisedTrainer(object):
         steps_per_epoch = len(batch_iterator)
         total_steps = steps_per_epoch * n_epochs
 
+        effective_forcing_ratio = teacher_forcing_ratio
+        forcing_ratio_lambda = math.log(2)/teacher_forcing_half_life if teacher_forcing_half_life else None
+
         step = start_step
         step_elapsed = 0
         for epoch in range(start_epoch, n_epochs + 1):
@@ -137,7 +142,10 @@ class SupervisedTrainer(object):
                 step += 1
                 step_elapsed += 1
 
-                use_teacher_forcing = random.random() < teacher_forcing_ratio
+                if forcing_ratio_lambda is not None:
+                    effective_forcing_ratio = teacher_forcing_ratio * math.exp(-step*forcing_ratio_lambda)
+
+                use_teacher_forcing = random.random() < effective_forcing_ratio
 
                 input_variables, input_lengths = getattr(batch, seq2seq.src_field_name)
                 target_variables = getattr(batch, seq2seq.tgt_field_name)
@@ -157,9 +165,11 @@ class SupervisedTrainer(object):
                 if step % self.print_every == 0 and step_elapsed > self.print_every:
                     print_loss_avg = print_loss_total / self.print_every
                     print_loss_total = 0
-                    log_msg = "Progress: %d%%, Train %s: %.4f" % (
+                    log_msg = "Forcing Ratio: %.4f, Progress: %d%%, Train %s (%s): %.4f" % (
+                        effective_forcing_ratio,
                         step / total_steps * 100,
                         self.loss.name,
+                        "forcing" if use_teacher_forcing else "RL",
                         print_loss_avg,
                     )
                     log.info(log_msg)
@@ -208,6 +218,7 @@ class SupervisedTrainer(object):
         dev_data=None,
         optimizer=None,
         teacher_forcing_ratio=0,
+        teacher_forcing_half_life=None,
     ):
         """ Run training for a given model.
 
@@ -262,5 +273,6 @@ class SupervisedTrainer(object):
             step,
             dev_data=dev_data,
             teacher_forcing_ratio=teacher_forcing_ratio,
+            teacher_forcing_half_life=teacher_forcing_half_life,
         )
         return model
