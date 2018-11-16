@@ -93,16 +93,10 @@ else:
     train = torchtext.data.TabularDataset(
         path=opt.train_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
     )
-    src.build_vocab(train, vectors="glove.6B.100d", max_size=50000)
-    tgt.build_vocab(train, vectors="glove.6B.100d", max_size=50000)
+    src.build_vocab(train, vectors="glove.6B.100d", max_size=10000)
+    tgt.build_vocab(train, vectors="glove.6B.100d", max_size=10000)
     input_vocab = src.vocab
     output_vocab = tgt.vocab
-
-    # NOTE: If the source field name and the target field name
-    # are different from 'src' and 'tgt' respectively, they have
-    # to be set explicitly before any training or inference
-    # seq2seq.src_field_name = 'src'
-    # seq2seq.tgt_field_name = 'tgt'
 
     # Prepare loss
     weight = torch.ones(len(tgt.vocab))
@@ -114,7 +108,7 @@ else:
     if not opt.resume:
         # Initialize model
         hidden_size = 100
-        bidirectional = False
+        bidirectional = True
 
         encoder = EncoderRNN(
             len(src.vocab),
@@ -143,12 +137,9 @@ else:
         for param in seq2seq.parameters():
             param.data.uniform_(-0.08, 0.08)
 
-        # Optimizer and learning rate scheduler can be customized by
-        # explicitly constructing the objects and pass to the trainer.
-        #
-        # optimizer = Optimizer(torch.optim.Adam(seq2seq.parameters()), max_grad_norm=5)
-        # scheduler = StepLR(optimizer.optimizer, 1)
-        # optimizer.set_scheduler(scheduler)
+        optimizer = Optimizer(torch.optim.Adam(seq2seq.parameters(), lr=1e-4), max_grad_norm=5)
+        scheduler = StepLR(optimizer.optimizer, 1)
+        optimizer.set_scheduler(scheduler)
 
     # train
     t = SupervisedTrainer(
