@@ -54,20 +54,28 @@ class Evaluator(object):
                 target_variables = getattr(batch, seq2seq.tgt_field_name)
 
                 decoder_outputs, decoder_hidden, other = model(
-                    input_variables, input_lengths.tolist(), target_variables
+                    input_variables, input_lengths.tolist(), target_variables,
+                    use_teacher_forcing=False,
                 )
 
                 # Evaluation
-                seqlist = other["sequence"]
+                # seqlist = other["sequence"]
                 for step, step_output in enumerate(decoder_outputs):
+                    batch_size = target_variables.size(0)
+                    if batch_size != self.batch_size:
+                        continue
                     target = target_variables[:, step + 1]
                     loss.eval_batch(
-                        step_output.view(target_variables.size(0), -1), target
+                        step_output.contiguous().view(batch_size, -1),
+                        target,
+                        sampled=other['sampled'][step],
+                        greedy=other['sequence'][step],
+                        use_teacher_forcing=False,
                     )
 
                     non_padding = target.ne(pad)
                     correct = (
-                        seqlist[step]
+                        other['sampled'][step]
                         .view(-1)
                         .eq(target)
                         .masked_select(non_padding)
@@ -82,4 +90,4 @@ class Evaluator(object):
         else:
             accuracy = match / total
 
-        return loss.get_loss(), accuracy
+        return loss.get_loss(False), accuracy

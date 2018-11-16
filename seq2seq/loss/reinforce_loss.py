@@ -65,7 +65,7 @@ class BLEULoss(NLLLoss):
         self.greedy_seq.append(greedy.squeeze())
         self.sampled_seq.append(sampled.squeeze())
         self.target_seq.append(target.squeeze())
-        
+
         # accumulate log loss through parent class
         # print("non-teacher", outputs.size(), sampled.size())
         super(BLEULoss, self).eval_batch(outputs, sampled.squeeze())
@@ -81,6 +81,6 @@ class BLEULoss(NLLLoss):
             greedy_score = self.score(self.greedy_seq)
             sampled_score = self.score(self.sampled_seq)
             self.acc_loss = (sampled_score - greedy_score) * self.acc_loss
-        
+
         self.acc_loss = self.acc_loss.mean()
         return self.acc_loss

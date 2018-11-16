@@ -78,8 +78,8 @@ if opt.load_checkpoint is not None:
 
     src = SourceField(sequential=True, use_vocab=True)
     tgt = TargetField(sequential=True, use_vocab=True)
-    src.vocab = input_vocab
-    tgt.vocab = output_vocab
+    src.rebuild_vocab(input_vocab)
+    tgt.rebuild_vocab(output_vocab)
 
     weight = torch.ones(len(tgt.vocab))
     pad = tgt.vocab.stoi[tgt.pad_token]
@@ -170,13 +170,13 @@ else:
     )
 
 predictor = Predictor(seq2seq, input_vocab, output_vocab)
-# loss, acc = Evaluator(loss=loss).evaluate(
-#     seq2seq,
-#     torchtext.data.TabularDataset(
-#         path=opt.test_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
-#     ),
-# )
-# logging.info("Loss: {}, Acc: {}".format(loss, acc))
+loss, acc = Evaluator(loss=loss).evaluate(
+    seq2seq,
+    torchtext.data.TabularDataset(
+        path=opt.test_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
+    ),
+)
+logging.info("Loss: {}, Acc: {}".format(loss, acc))
 
 while True:
     seq_str = input("Type in a source sequence:")

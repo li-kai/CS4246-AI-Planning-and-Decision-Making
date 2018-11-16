@@ -22,6 +22,9 @@ class SourceField(torchtext.data.Field):
 
         super(SourceField, self).__init__(**kwargs)
 
+    def rebuild_vocab(self, vocab):
+        self.vocab = vocab
+
 
 class TargetField(torchtext.data.Field):
     """ Wrapper class of torchtext.data.Field that forces batch_first to be True and prepend <sos> and append <eos> to sequences in preprocessing step.
@@ -58,3 +61,8 @@ class TargetField(torchtext.data.Field):
         super(TargetField, self).build_vocab(*args, **kwargs)
         self.sos_id = self.vocab.stoi[self.SYM_SOS]
         self.eos_id = self.vocab.stoi[self.SYM_EOS]
+
+    def rebuild_vocab(self, vocab):
+        self.vocab = vocab
+        self.sos_id = vocab.stoi[self.SYM_SOS]
+        self.eos_id = vocab.stoi[self.SYM_EOS]
