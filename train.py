@@ -93,8 +93,8 @@ else:
     train = torchtext.data.TabularDataset(
         path=opt.train_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
     )
-    src.build_vocab(train, vectors="glove.6B.100d", max_size=10000)
-    tgt.build_vocab(train, vectors="glove.6B.100d", max_size=10000)
+    src.build_vocab(train, vectors="glove.6B.100d", max_size=16384)
+    tgt.build_vocab(train, vectors="glove.6B.100d", max_size=16384)
     input_vocab = src.vocab
     output_vocab = tgt.vocab
 

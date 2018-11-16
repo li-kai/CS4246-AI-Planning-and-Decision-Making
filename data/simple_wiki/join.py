@@ -4,7 +4,7 @@ import os
 
 nlp = spacy.load("en_core_web_sm", disable=["parser", "tagger", "ner"])
 
-MIN_LEN = 10
+MIN_LEN = 3
 MAX_LEN = 25
 
 source_file = "normal.aligned"

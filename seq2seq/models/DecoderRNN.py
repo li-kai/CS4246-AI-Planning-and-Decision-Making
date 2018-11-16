@@ -165,8 +165,6 @@ class DecoderRNN(BaseRNN):
                 ret_dict[DecoderRNN.KEY_ATTN_SCORE].append(step_attn)
             symbols = step_output.argmax(dim=1, keepdim=True)
             s_symbols = torch.multinomial(step_sampled, 1)
-            print("symbols", symbols)
-            print("s_symbols", s_symbols)
             sequence_symbols.append(symbols)
             sampled_symbols.append(s_symbols)
 
