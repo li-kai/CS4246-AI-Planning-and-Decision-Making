@@ -12,6 +12,8 @@ class BLEULoss(NLLLoss):
         super(BLEULoss, self).__init__(
             weight=weight, mask=mask, reduction="none"
         )
+        self.forcing_loss = NLLLoss(weight=weight, mask=mask, reduction="none")
+        self.rl_loss = NLLLoss(weight=weight, mask=mask, reduction="none")
         self.tgt = tgt
         self.sampled_seq = []
         self.greedy_seq = []
@@ -20,6 +22,8 @@ class BLEULoss(NLLLoss):
 
     def reset(self):
         super(BLEULoss, self).reset()
+        self.forcing_loss.reset()
+        self.rl_loss.reset()
         self.sampled_seq = []
         self.greedy_seq = []
         self.target_seq = []
@@ -54,10 +58,11 @@ class BLEULoss(NLLLoss):
     Evaluates a training step, accumulating loss
     '''
     def eval_batch(self, outputs, target, sampled=None, greedy=None, use_teacher_forcing=True):
-        if use_teacher_forcing:
-            # print("teacher", outputs.size(), target.size())
-            super(BLEULoss, self).eval_batch(outputs, target)
-            return
+        # if use_teacher_forcing:
+        #     # print("teacher", outputs.size(), target.size())
+        #     super(BLEULoss, self).eval_batch(outputs, target)
+        #     return
+        self.forcing_loss.eval_batch(outputs, target)
 
         if sampled is None or greedy is None:
             raise ValueError("Missing sampled or greedy input")
@@ -68,19 +73,17 @@ class BLEULoss(NLLLoss):
 
         # accumulate log loss through parent class
         # print("non-teacher", outputs.size(), sampled.size())
-        super(BLEULoss, self).eval_batch(outputs, sampled.squeeze())
+        self.rl_loss.eval_batch(outputs, sampled.squeeze())
 
     def get_loss(self, use_teacher_forcing):
-        if isinstance(self.acc_loss, int):
-            return 0
-        if not use_teacher_forcing:
-            self.greedy_seq = torch.stack(self.greedy_seq, dim=1)
-            self.sampled_seq = torch.stack(self.sampled_seq, dim=1)
-            self.target_seq = torch.stack(self.target_seq, dim=1)
+        self.greedy_seq = torch.stack(self.greedy_seq, dim=1)
+        self.sampled_seq = torch.stack(self.sampled_seq, dim=1)
+        self.target_seq = torch.stack(self.target_seq, dim=1)
 
-            greedy_score = self.score(self.greedy_seq)
-            sampled_score = self.score(self.sampled_seq)
-            self.acc_loss = (sampled_score - greedy_score) * self.acc_loss
+        greedy_score = self.score(self.greedy_seq)
+        sampled_score = self.score(self.sampled_seq)
+        rl_loss = (sampled_score - greedy_score) * self.rl_loss.acc_loss
+        forcing_loss = self.forcing_loss.acc_loss
 
-        self.acc_loss = self.acc_loss.mean()
+        self.acc_loss = (0.5 * rl_loss + 0.5 * forcing_loss).mean()
         return self.acc_loss

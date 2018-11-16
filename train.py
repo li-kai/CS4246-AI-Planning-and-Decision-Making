@@ -15,6 +15,7 @@ from seq2seq.dataset import SourceField, TargetField
 from seq2seq.evaluator import Predictor, Evaluator
 from seq2seq.util.checkpoint import Checkpoint
 
+
 # Path to experiment directory for storing checkpoints
 EXPERIMENT_PATH = "./experiment"
 
@@ -88,7 +89,7 @@ else:
     # Prepare dataset
     src = SourceField(sequential=True, use_vocab=True)
     tgt = TargetField(sequential=True, use_vocab=True)
-    max_len = 25
+    max_len = 23
 
     train = torchtext.data.TabularDataset(
         path=opt.train_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
@@ -164,8 +165,8 @@ else:
         train,
         num_epochs=6,
         optimizer=optimizer,
-        teacher_forcing_ratio=1,
-        teacher_forcing_half_life=500,
+        teacher_forcing_ratio=0.6,
+        teacher_forcing_half_life=5000,
         resume=opt.resume,
     )
 
@@ -178,7 +179,13 @@ loss, acc = Evaluator(loss=loss).evaluate(
 )
 logging.info("Loss: {}, Acc: {}".format(loss, acc))
 
+import nltk
+nltk.download('perluniprops')
+
+from nltk.tokenize.nist import NISTTokenizer
+nist = NISTTokenizer()
+
 while True:
     seq_str = input("Type in a source sequence:")
-    seq = seq_str.strip().split()
+    seq = nist.tokenize(seq_str.strip(), lowercase=False)
     print(predictor.predict(seq))

@@ -29,6 +29,7 @@ class Predictor(object):
 
         with torch.no_grad():
             softmax_list, _, other = self.model(src_id_seq, [len(src_seq)])
+        print(softmax_list[0].max())
 
         return other
 
