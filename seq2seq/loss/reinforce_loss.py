@@ -18,6 +18,8 @@ class BLEULoss(NLLLoss):
 
     def __init__(self, tgt_vocab, weight=None, mask=None, eos_id=None):
         super(BLEULoss, self).__init__(weight=weight, mask=mask)
+        self.mask = mask
+        self.weight = weight
         self.tgt_vocab = tgt_vocab
         self.itos = tgt_vocab.itos.__getitem__
         self.eos_id = eos_id
@@ -66,7 +68,20 @@ class BLEULoss(NLLLoss):
         # print("->", scores)
         return torch.FloatTensor(scores)
 
-    def eval_batch(self, outputs, greedy, sampled, lengths, target):
+    def teacher_forcing_eval_batch(self, outputs, greedy, sampled, lengths, targets):
+        batch_size, seq_length = targets.size(0), len(outputs)
+        acc_loss = torch.zeros((batch_size, 1)).cpu()
+
+        for i in range(seq_length):
+            output = outputs[i].cpu()
+            target = targets[:,i].cpu().view(batch_size, -1)
+            acc_loss -= torch.gather(output, 1, target)
+
+        acc_loss = acc_loss.squeeze()
+        self.acc_loss = acc_loss.mean()
+        self.norm_term = batch_size
+
+    def reinforce_eval_batch(self, outputs, greedy, sampled, lengths, target):
         # iter through time step
         # optimisation: do in matrix form
         batch_size, seq_length = target.size(0), len(outputs)
@@ -114,3 +129,11 @@ class BLEULoss(NLLLoss):
         self.acc_loss = self.acc_loss.mean()
         # print(self.acc_loss)
         self.norm_term = batch_size
+
+    def eval_batch(
+        self, outputs, greedy, sampled, lengths, target, use_teacher_forcing
+    ):
+        if use_teacher_forcing:
+            self.teacher_forcing_eval_batch(outputs, greedy, sampled, lengths, target)
+        else:
+            self.reinforce_eval_batch(outputs, greedy, sampled, lengths, target)

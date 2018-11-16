@@ -3,6 +3,7 @@ import logging
 import os
 import random
 import time
+import math
 
 import torch
 import torchtext
@@ -13,6 +14,8 @@ from seq2seq.evaluator import Evaluator
 from seq2seq.optim import Optimizer
 from seq2seq.util.checkpoint import Checkpoint
 
+
+TEACHER_FORCING_RATIO_HALF_LIFE = 500
 
 class SupervisedTrainer(object):
     """ The SupervisedTrainer class helps in setting up a training framework in a
@@ -61,15 +64,16 @@ class SupervisedTrainer(object):
         input_lengths,
         target_variable,
         model,
-        teacher_forcing_ratio,
+        use_teacher_forcing,
     ):
+
         loss = self.loss
         # Forward propagation
-        decoder_outputs, decoder_hidden, other = model(
+        decoder_outputs, decoder_hidden, other = model(  # seq2seq
             input_variable,
             input_lengths,
             target_variable,
-            teacher_forcing_ratio=teacher_forcing_ratio,
+            use_teacher_forcing=use_teacher_forcing,
         )
         # Get loss
         loss.reset()
@@ -79,6 +83,7 @@ class SupervisedTrainer(object):
             other["sampled"],
             other["length"],
             target_variable[:, 1:],
+            use_teacher_forcing,
         )
         # Backward propagation
         model.zero_grad()
@@ -96,6 +101,7 @@ class SupervisedTrainer(object):
         start_step,
         dev_data=None,
         teacher_forcing_ratio=0,
+        teacher_forcing_decay=False,
     ):
         log = self.logger
 
@@ -112,6 +118,8 @@ class SupervisedTrainer(object):
             device=device,
             repeat=False,
         )
+
+        effective_forcing_ratio = teacher_forcing_ratio
 
         steps_per_epoch = len(batch_iterator)
         total_steps = steps_per_epoch * n_epochs
@@ -130,6 +138,10 @@ class SupervisedTrainer(object):
             for batch in batch_generator:
                 step += 1
                 step_elapsed += 1
+                if teacher_forcing_decay:
+                    effective_forcing_ratio = teacher_forcing_ratio * math.exp(-step * math.log(2)/TEACHER_FORCING_RATIO_HALF_LIFE)
+
+                use_teacher_forcing = random.random() < effective_forcing_ratio
 
                 input_variables, input_lengths = getattr(batch, seq2seq.src_field_name)
                 target_variables = getattr(batch, seq2seq.tgt_field_name)
@@ -139,7 +151,7 @@ class SupervisedTrainer(object):
                     input_lengths.tolist(),
                     target_variables,
                     model,
-                    teacher_forcing_ratio,
+                    use_teacher_forcing,
                 )
 
                 # Record average loss
@@ -149,9 +161,11 @@ class SupervisedTrainer(object):
                 if step % self.print_every == 0 and step_elapsed > self.print_every:
                     print_loss_avg = print_loss_total / self.print_every
                     print_loss_total = 0
-                    log_msg = "Progress: %d%%, Train %s: %.4f" % (
+                    log_msg = "Forcing Ratio %.4f, Progress: %d%%, Train %s (%s): %.4f" % (
+                        effective_forcing_ratio,
                         step / total_steps * 100,
                         self.loss.name,
+                        "forcing" if use_teacher_forcing else "RL",
                         print_loss_avg,
                     )
                     log.info(log_msg)
@@ -200,6 +214,7 @@ class SupervisedTrainer(object):
         dev_data=None,
         optimizer=None,
         teacher_forcing_ratio=0,
+        teacher_forcing_decay=False,
     ):
         """ Run training for a given model.
 
@@ -254,5 +269,6 @@ class SupervisedTrainer(object):
             step,
             dev_data=dev_data,
             teacher_forcing_ratio=teacher_forcing_ratio,
+            teacher_forcing_decay=teacher_forcing_decay,
         )
         return model
