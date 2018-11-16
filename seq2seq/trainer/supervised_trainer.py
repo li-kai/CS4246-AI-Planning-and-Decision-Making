@@ -78,7 +78,7 @@ class SupervisedTrainer(object):
             other["sequence"],
             other["sampled"],
             other["length"],
-            target_variable,
+            target_variable[:, 1:],
         )
         # Backward propagation
         model.zero_grad()

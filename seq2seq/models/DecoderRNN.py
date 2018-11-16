@@ -128,11 +128,11 @@ class DecoderRNN(BaseRNN):
         # multinomial_sample = torch.multinomial(soft_max, output_size, replacement=True)
         # multinomial_sample = multinomial_sample.view(batch_size, output_size, -1)
 
-        x = torch.multinomial(soft_max, 1).view(batch_size, 1, -1)
+        # x = torch.multinomial(soft_max, 1).view(batch_size, 1, -1)
         # print("soft_max", soft_max)
         # print("x", x)
 
-        return predicted_softmax, x, hidden, attn
+        return predicted_softmax, soft_max, hidden, attn
 
     def forward(
         self,
@@ -164,8 +164,11 @@ class DecoderRNN(BaseRNN):
             if self.use_attention:
                 ret_dict[DecoderRNN.KEY_ATTN_SCORE].append(step_attn)
             symbols = step_output.argmax(dim=1, keepdim=True)
+            s_symbols = torch.multinomial(step_sampled, 1)
+            print("symbols", symbols)
+            print("s_symbols", s_symbols)
             sequence_symbols.append(symbols)
-            sampled_symbols.append(step_sampled)
+            sampled_symbols.append(s_symbols)
 
             eos_batches = symbols.data.eq(self.eos_id)
             if eos_batches.dim() > 0:

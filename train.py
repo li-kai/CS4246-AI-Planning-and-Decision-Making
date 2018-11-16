@@ -88,7 +88,7 @@ else:
     # Prepare dataset
     src = SourceField(sequential=True, use_vocab=True)
     tgt = TargetField(sequential=True, use_vocab=True)
-    max_len = 30
+    max_len = 25
 
     train = torchtext.data.TabularDataset(
         path=opt.train_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
