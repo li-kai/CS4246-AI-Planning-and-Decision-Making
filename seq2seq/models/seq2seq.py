@@ -11,16 +11,14 @@ class Seq2seq(nn.Module):
         decoder (DecoderRNN): object of DecoderRNN
         decode_function (func, optional): function to generate symbols from output hidden states (default: F.log_softmax)
 
-    Inputs: input_variable, input_lengths, target_variable, teacher_forcing_ratio
+    Inputs: input_variable, input_lengths, target_variable, use_teacher_forcing
         - **input_variable** (list, option): list of sequences, whose length is the batch size and within which
           each sequence is a list of token IDs. This information is forwarded to the encoder.
         - **input_lengths** (list of int, optional): A list that contains the lengths of sequences
             in the mini-batch, it must be provided when using variable length RNN (default: `None`)
         - **target_variable** (list, optional): list of sequences, whose length is the batch size and within which
           each sequence is a list of token IDs. This information is forwarded to the decoder.
-        - **teacher_forcing_ratio** (int, optional): The probability that teacher forcing will be used. A random number
-          is drawn uniformly from 0-1 for every decoding token, and if the sample is smaller than the given value,
-          teacher forcing would be used (default is 0)
+        - **use_teacher_forcing** (bool, optional): Whether teacher forcing will be used.
 
     Outputs: decoder_outputs, decoder_hidden, ret_dict
         - **decoder_outputs** (batch): batch-length list of tensors with size (max_length, hidden_size) containing the
@@ -49,14 +47,15 @@ class Seq2seq(nn.Module):
         input_variable,
         input_lengths=None,
         target_variable=None,
-        teacher_forcing_ratio=0,
+        use_teacher_forcing=False,
     ):
+        # Encoder's forward
         encoder_outputs, encoder_hidden = self.encoder(input_variable, input_lengths)
-        result = self.decoder(
+        result = self.decoder( # DecoderRNN's forward
             inputs=target_variable,
             encoder_hidden=encoder_hidden,
             encoder_outputs=encoder_outputs,
             function=self.decode_function,
-            teacher_forcing_ratio=teacher_forcing_ratio,
+            use_teacher_forcing=use_teacher_forcing,
         )
         return result

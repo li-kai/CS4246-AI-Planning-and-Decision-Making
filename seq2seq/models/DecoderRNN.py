@@ -38,7 +38,7 @@ class DecoderRNN(BaseRNN):
         KEY_LENGTH (str): key used to indicate a list representing lengths of output sequences in `ret_dict`
         KEY_SEQUENCE (str): key used to indicate a list of sequences in `ret_dict`
 
-    Inputs: inputs, encoder_hidden, encoder_outputs, function, teacher_forcing_ratio
+    Inputs: inputs, encoder_hidden, encoder_outputs, function, use_teacher_forcing
         - **inputs** (batch, seq_len, input_size): list of sequences, whose length is the batch size and within which
           each sequence is a list of token IDs.  It is used for teacher forcing when provided. (default `None`)
         - **encoder_hidden** (num_layers * num_directions, batch_size, hidden_size): tensor containing the features in the
@@ -47,7 +47,7 @@ class DecoderRNN(BaseRNN):
           Used for attention mechanism (default is `None`).
         - **function** (torch.nn.Module): A function used to generate symbols from RNN hidden state
           (default is `torch.nn.functional.log_softmax`).
-        - **teacher_forcing_ratio** (float): The probability that teacher forcing will be used. A random number is
+        - **use_teacher_forcing** (float): The probability that teacher forcing will be used. A random number is
           drawn uniformly from 0-1 for every decoding token, and if the sample is smaller than the given value,
           teacher forcing would be used (default is 0).
 
@@ -64,6 +64,7 @@ class DecoderRNN(BaseRNN):
     KEY_ATTN_SCORE = "attention_score"
     KEY_LENGTH = "length"
     KEY_SEQUENCE = "sequence"
+    KEY_SAMPLED_SEQUENCE = "sampled"
 
     def __init__(
         self,
@@ -120,10 +121,11 @@ class DecoderRNN(BaseRNN):
         if self.use_attention:
             output, attn = self.attention(output, encoder_outputs)
 
-        predicted_softmax = function(
-            self.out(output.contiguous().view(-1, self.hidden_size)), dim=1
-        ).view(batch_size, output_size, -1)
-        return predicted_softmax, hidden, attn
+        output = self.out(output.contiguous().view(-1, self.hidden_size))
+        predicted_softmax = function(output, dim=1).view(batch_size, output_size, -1)
+
+        softmax = F.softmax(output, dim=1).view(batch_size, output_size, -1)
+        return predicted_softmax, softmax, hidden, attn
 
     def forward(
         self,
@@ -131,28 +133,29 @@ class DecoderRNN(BaseRNN):
         encoder_hidden=None,
         encoder_outputs=None,
         function=F.log_softmax,
-        teacher_forcing_ratio=0,
+        use_teacher_forcing=False,
     ):
         ret_dict = dict()
         if self.use_attention:
             ret_dict[DecoderRNN.KEY_ATTN_SCORE] = list()
 
         inputs, batch_size, max_length = self._validate_args(
-            inputs, encoder_hidden, encoder_outputs, function, teacher_forcing_ratio
+            inputs, encoder_hidden, encoder_outputs, function, use_teacher_forcing
         )
         decoder_hidden = self._init_state(encoder_hidden)
 
-        use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
-
         decoder_outputs = []
         sequence_symbols = []
+        sampled_symbols = []
         lengths = np.array([max_length] * batch_size)
 
-        def decode(step, step_output, step_attn):
+        def decode(step, step_output, step_attn, step_sample):
             decoder_outputs.append(step_output)
             if self.use_attention:
                 ret_dict[DecoderRNN.KEY_ATTN_SCORE].append(step_attn)
             symbols = decoder_outputs[-1].topk(1)[1]
+            sampled = torch.multinomial(step_sample, 1)
+            sampled_symbols.append(sampled)
             sequence_symbols.append(symbols)
 
             eos_batches = symbols.data.eq(self.eos_id)
@@ -163,31 +166,33 @@ class DecoderRNN(BaseRNN):
             return symbols
 
         # Manual unrolling is used to support random teacher forcing.
-        # If teacher_forcing_ratio is True or False instead of a probability, the unrolling can be done in graph
         if use_teacher_forcing:
             decoder_input = inputs[:, :-1]
-            decoder_output, decoder_hidden, attn = self.forward_step(
+            decoder_output, sampled_output, decoder_hidden, attn = self.forward_step(
                 decoder_input, decoder_hidden, encoder_outputs, function=function
             )
 
             for di in range(decoder_output.size(1)):
                 step_output = decoder_output[:, di, :]
+                step_sample = sampled_output[:, di, :]
                 if attn is not None:
                     step_attn = attn[:, di, :]
                 else:
                     step_attn = None
-                decode(di, step_output, step_attn)
+                decode(di, step_output, step_attn, step_sample)
         else:
             decoder_input = inputs[:, 0].unsqueeze(1)
             for di in range(max_length):
-                decoder_output, decoder_hidden, step_attn = self.forward_step(
+                decoder_output, sampled_output, decoder_hidden, step_attn = self.forward_step(
                     decoder_input, decoder_hidden, encoder_outputs, function=function
                 )
                 step_output = decoder_output.squeeze(1)
-                symbols = decode(di, step_output, step_attn)
+                step_sample = sampled_output.squeeze(1)
+                symbols = decode(di, step_output, step_attn, step_sample)
                 decoder_input = symbols
 
         ret_dict[DecoderRNN.KEY_SEQUENCE] = sequence_symbols
+        ret_dict[DecoderRNN.KEY_SAMPLED_SEQUENCE] = sampled_symbols
         ret_dict[DecoderRNN.KEY_LENGTH] = lengths.tolist()
 
         return decoder_outputs, decoder_hidden, ret_dict
@@ -211,7 +216,7 @@ class DecoderRNN(BaseRNN):
         return h
 
     def _validate_args(
-        self, inputs, encoder_hidden, encoder_outputs, function, teacher_forcing_ratio
+        self, inputs, encoder_hidden, encoder_outputs, function, use_teacher_forcing
     ):
         if self.use_attention:
             if encoder_outputs is None:
@@ -233,7 +238,7 @@ class DecoderRNN(BaseRNN):
 
         # set default input and max decoding length
         if inputs is None:
-            if teacher_forcing_ratio > 0:
+            if use_teacher_forcing:
                 raise ValueError(
                     "Teacher forcing has to be disabled (set 0) when no inputs is provided."
                 )

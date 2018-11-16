@@ -62,15 +62,15 @@ class SupervisedTrainer(object):
         input_lengths,
         target_variable,
         model,
-        teacher_forcing_ratio,
+        use_teacher_forcing,
     ):
         loss = self.loss
-        # Forward propagation
+        # Forward propagation in seq2seq
         decoder_outputs, decoder_hidden, other = model(
             input_variable,
             input_lengths,
             target_variable,
-            teacher_forcing_ratio=teacher_forcing_ratio,
+            use_teacher_forcing=use_teacher_forcing,
         )
         # Get loss
         loss.reset()
@@ -79,13 +79,19 @@ class SupervisedTrainer(object):
             loss.eval_batch(
                 step_output.contiguous().view(batch_size, -1),
                 target_variable[:, step + 1],
+                sampled=other['sampled'][step],
+                greedy=other['sequence'][step],
+                use_teacher_forcing=use_teacher_forcing,
             )
         # Backward propagation
+
+        total_loss = loss.get_loss(use_teacher_forcing)
+
         model.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-        return loss.get_loss()
+        return total_loss
 
     def _train_epoches(
         self,
@@ -131,6 +137,8 @@ class SupervisedTrainer(object):
                 step += 1
                 step_elapsed += 1
 
+                use_teacher_forcing = random.random() < teacher_forcing_ratio
+
                 input_variables, input_lengths = getattr(batch, seq2seq.src_field_name)
                 target_variables = getattr(batch, seq2seq.tgt_field_name)
 
@@ -139,7 +147,7 @@ class SupervisedTrainer(object):
                     input_lengths.tolist(),
                     target_variables,
                     model,
-                    teacher_forcing_ratio,
+                    use_teacher_forcing,
                 )
 
                 # Record average loss
