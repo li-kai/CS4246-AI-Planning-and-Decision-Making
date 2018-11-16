@@ -5,7 +5,7 @@ import os
 nlp = spacy.load("en_core_web_sm", disable=["parser", "tagger", "ner"])
 
 MIN_LEN = 10
-MAX_LEN = 30
+MAX_LEN = 25
 
 source_file = "normal.aligned"
 target_file = "simple.aligned"
@@ -19,13 +19,21 @@ test_file = os.path.join("test", "data.txt")
 
 line_pairs = []
 
+def is_unicode(mystring):
+    try:
+        mystring.encode('ascii')
+    except UnicodeEncodeError:
+        return True
+    else:
+        return False
+
 with open(source_file, "r") as source, open(target_file, "r") as target:
     for src, tgt in zip(source, target):
         target_parsed = tgt.split("\t")[2].rstrip()
-        if not (MIN_LEN < target_parsed.count(" ") < MAX_LEN):
+        if is_unicode(target_parsed) or not (MIN_LEN < target_parsed.count(" ") < MAX_LEN):
             continue
         source_parsed = src.split("\t")[2].rstrip()
-        if not (MIN_LEN < source_parsed.count(" ") < MAX_LEN):
+        if is_unicode(target_parsed) or not (MIN_LEN < source_parsed.count(" ") < MAX_LEN):
             continue
 
         target_tokenised = [w.text for w in nlp(target_parsed.lower())]
