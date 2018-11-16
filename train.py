@@ -83,7 +83,7 @@ if opt.load_checkpoint is not None:
 
     weight = torch.ones(len(tgt.vocab))
     pad = tgt.vocab.stoi[tgt.pad_token]
-    loss = BLEULoss(tgt.vocab, weight, pad)
+    loss = BLEULoss(tgt.vocab, weight, pad, tgt.eos_id)
 else:
     # Prepare dataset
     src = SourceField(sequential=True, use_vocab=True)
@@ -101,7 +101,7 @@ else:
     # Prepare loss
     weight = torch.ones(len(tgt.vocab))
     pad = tgt.vocab.stoi[tgt.pad_token]
-    loss = BLEULoss(tgt.vocab, weight, pad)
+    loss = BLEULoss(tgt.vocab, weight, pad, tgt.eos_id)
 
     seq2seq = None
     optimizer = None

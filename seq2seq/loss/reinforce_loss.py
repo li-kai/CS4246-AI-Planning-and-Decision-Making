@@ -16,10 +16,11 @@ class BLEULoss(NLLLoss):
 
     _NAME = "Avg BLEULoss"
 
-    def __init__(self, tgt_vocab, weight=None, mask=None):
+    def __init__(self, tgt_vocab, weight=None, mask=None, eos_id=None):
         super(BLEULoss, self).__init__(weight=weight, mask=mask)
         self.tgt_vocab = tgt_vocab
         self.itos = tgt_vocab.itos.__getitem__
+        self.eos_id = eos_id
         self.smoothing = SmoothingFunction()
 
     def get_loss(self):
@@ -30,11 +31,13 @@ class BLEULoss(NLLLoss):
         # loss /= self.norm_term
         return loss
 
-    def indices_to_words(self, inputs, keep_mask=False):
-        if keep_mask:
-            return [self.itos(x) for x in inputs]
-        else:
-            return [self.itos(x) for x in inputs if x != self.mask]
+    def indices_to_words(self, inputs):
+        output = []
+        for x in inputs:
+            if x == self.eos_id or x == self.mask:
+                return output
+            output.append(self.itos(x))
+        return output
 
     def dup_percentage(self, input):
         return len(set(input)) / len(input)
@@ -90,7 +93,7 @@ class BLEULoss(NLLLoss):
         sampled_sentences = []
         for i in range(batch_size):
             length = lengths[i]
-            sentence = self.indices_to_words(greedy_indices[i, :length], keep_mask=True)
+            sentence = self.indices_to_words(greedy_indices[i, :length])
             greedy_sentences.append(sentence)
             sentence = self.indices_to_words(sampled_indices[i])
             sampled_sentences.append(sentence)
