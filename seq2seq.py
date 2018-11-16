@@ -88,13 +88,13 @@ else:
     # Prepare dataset
     src = SourceField(sequential=True, use_vocab=True)
     tgt = TargetField(sequential=True, use_vocab=True)
-    max_len = 30
+    max_len = 25 
 
     train = torchtext.data.TabularDataset(
         path=opt.train_path, format="tsv", fields=[("src", src), ("tgt", tgt)]
     )
-    src.build_vocab(train, vectors="glove.6B.100d", max_size=50000)
-    tgt.build_vocab(train, vectors="glove.6B.100d", max_size=50000)
+    src.build_vocab(train, vectors="glove.6B.100d", max_size=16384)
+    tgt.build_vocab(train, vectors="glove.6B.100d", max_size=16384)
     input_vocab = src.vocab
     output_vocab = tgt.vocab
 
@@ -114,7 +114,7 @@ else:
     if not opt.resume:
         # Initialize model
         hidden_size = 100
-        bidirectional = False
+        bidirectional = True 
 
         encoder = EncoderRNN(
             len(src.vocab),
